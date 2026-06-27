@@ -2682,7 +2682,7 @@ window.td.onUpdateReady(() => {
   if (_updateBanner) {
     _updateBanner.innerHTML = `
       <span>✅ Update ready to install</span>
-      <button id="update-install-btn" style="background:#2a5cdb;color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer">Restart & Install</button>
+      <button id="update-install-btn" style="background:#2a5cdb;color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer">Restart to update</button>
       <button id="update-dismiss2" style="background:transparent;color:#888;border:none;font-size:16px;cursor:pointer;padding:0 4px">×</button>`;
     $('update-install-btn').onclick = () => window.td.installUpdate();
     $('update-dismiss2').onclick = () => { _updateBanner?.remove(); _updateBanner = null; };

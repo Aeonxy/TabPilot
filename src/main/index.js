@@ -123,6 +123,8 @@ app.whenReady().then(async () => {
       // Check for updates after license is valid
       if (app.isPackaged && autoUpdater) {
         setTimeout(() => { try { autoUpdater.checkForUpdates(); } catch(e) {} }, 3000);
+        // Check every 5 minutes while app is open
+        setInterval(() => { try { autoUpdater.checkForUpdates(); } catch(e) {} }, 5 * 60 * 1000);
       }
 
       const checkLicense = async () => {
