@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://jsqtmbtlnimxgpuuvdxk.supabase.co">
+  <title>TabPilot</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="shell" style="display:none">
+  <!-- Top bar -->
+  <div id="topbar">
+    <div id="topbar-left">
+      <button class="nav-top" id="btn-new">+ New instance</button>
+      <div class="nav-sep"></div>
+      <div class="nav-group">        <button class="nav-btn" id="nav-shortcuts" data-panel="shortcuts">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+          Shortcuts
+        </button>
+        <button class="nav-btn" id="nav-macro" data-panel="macro">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          Macro
+        </button>
+        <button class="nav-btn" id="nav-devices" data-panel="devices">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18.01"/></svg>
+          Devices
+        </button>
+        <button class="nav-btn" id="nav-settings" data-panel="settings">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          Settings
+        </button>
+        <button class="nav-btn" id="nav-help">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3m.08 4h.01"/></svg>
+          Help
+        </button>
+        <button class="nav-btn" id="nav-bug">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2a4 4 0 0 1 4 4v1h1a3 3 0 0 1 3 3v1h-3v1a5 5 0 0 1-10 0v-1H4v-1a3 3 0 0 1 3-3h1V6a4 4 0 0 1 4-4z"/><path d="M4 12H2m20 0h-2M6 7l-2-2m14 2 2-2M6 17l-2 2m14-2 2 2"/></svg>
+          Report a bug
+        </button>
+        <button class="nav-btn" id="nav-account" data-panel="account">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+          About
+        </button>
+      </div>
+    </div>
+    <div id="topbar-drag" style="flex:1;height:100%;-webkit-app-region:drag"></div>
+    <div id="topbar-right">
+      <div id="device-status-pill" class="status-pill hidden"></div>
+      <div id="macro-status-pill" class="status-pill hidden"></div>
+      <button id="win-min">&#8722;</button>
+      <button id="win-max">&#9633;</button>
+      <button id="win-close">&#10005;</button>
+    </div>
+  </div>
+
+  <!-- Tab bar -->
+  <div id="tabbar">
+    <div id="tabs"></div>
+  </div>
+
+  <!-- Panel -->
+  <div id="panel" class="hidden">
+    <div id="panel-head">
+      <span id="panel-title"></span>
+      <button id="panel-close">×</button>
+    </div>
+    <div id="panel-body"></div>
+  </div>
+
+  <!-- Main content -->
+  <div id="content">
+    <div id="empty">
+      <div id="empty-status">Scanning for devices…</div>
+      <button class="btn-accent" id="btn-new-empty">+ New instance</button>
+      <div class="hint">Ctrl+T</div>
+    </div>
+    <div id="panes"></div>
+  </div>
+</div>
+
+<!-- Launch modal -->
+<div id="modal-backdrop" class="hidden">
+  <div id="modal-wrapper">
+    <div id="modal">
+      <div class="modal-head">
+        <span>Launch an instance</span>
+        <button class="modal-x" id="modal-close">×</button>
+      </div>
+      <div class="modal-body" id="modal-body">
+        <div class="ml">DEVICE</div>
+        <div id="modal-devices"></div>
+        <div id="modal-app-section">
+          <div class="ml" style="margin-top:14px">APPLICATION</div>
+          <input id="modal-search" class="search-input" placeholder="Search by name or package…">
+          <div id="modal-apps"></div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn-ghost" id="modal-cancel">Cancel</button>
+        <button class="btn-sf hidden" id="modal-sf-btn">🔒 Open Secure Folder</button>
+        <button class="btn-accent" id="modal-launch" disabled>Launch</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

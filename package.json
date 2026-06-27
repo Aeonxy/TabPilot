@@ -1,0 +1,75 @@
+{
+  "name": "tabpilot",
+  "version": "1.0.0",
+  "description": "Multi-instance Android mirroring",
+  "main": "src/main/index.js",
+  "productName": "TabPilot",
+  "author": "Aeonxy",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win",
+    "download-bins": "node scripts/download-bins.js"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.tabpilot.app",
+    "productName": "TabPilot",
+    "copyright": "Copyright \u00a9 2026 Aeonxy",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "!src/**/*.map",
+      "node_modules/node-fetch/**/*",
+      "node_modules/data-uri-to-buffer/**/*",
+      "node_modules/fetch-blob/**/*",
+      "node_modules/formdata-polyfill/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "bin/win32",
+        "to": "bin/win32",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "TabPilot-Setup-${version}.exe",
+      "certificateFile": null,
+      "certificatePassword": null
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "TabPilot",
+      "deleteAppDataOnUninstall": false
+    },
+    "publish": null
+  },
+  "dependencies": {
+    "node-fetch": "^3.3.2",
+    "koffi": "^2.9.0"
+  }
+}
