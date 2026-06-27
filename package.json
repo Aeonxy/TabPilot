@@ -29,7 +29,9 @@
       "node_modules/node-fetch/**/*",
       "node_modules/data-uri-to-buffer/**/*",
       "node_modules/fetch-blob/**/*",
-      "node_modules/formdata-polyfill/**/*"
+      "node_modules/formdata-polyfill/**/*",
+      "node_modules/electron-updater/**/*",
+      "node_modules/builder-util-runtime/**/*"
     ],
     "extraResources": [
       {
@@ -66,10 +68,16 @@
       "shortcutName": "TabPilot",
       "deleteAppDataOnUninstall": false
     },
-    "publish": null
+    "publish": {
+      "provider": "github",
+      "owner": "Aeonxy",
+      "repo": "TabPilot",
+      "private": true
+    }
   },
   "dependencies": {
     "node-fetch": "^3.3.2",
-    "koffi": "^2.9.0"
+    "koffi": "^2.9.0",
+    "electron-updater": "^6.3.0"
   }
 }

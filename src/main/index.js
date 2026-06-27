@@ -8,6 +8,30 @@ const { promisify } = require('util');
 const execFileAsync = promisify(execFile);
 const { activateLicense, validateSavedLicense, clearLicenseLocal } = require('./license');
 
+// ── Auto updater ───────────────────────────────────────────────────────────
+let autoUpdater;
+try {
+  autoUpdater = require('electron-updater').autoUpdater;
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.on('update-available', info => {
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('update:available', { version: info.version });
+    }
+  });
+  autoUpdater.on('download-progress', progress => {
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('update:progress', { percent: Math.round(progress.percent) });
+    }
+  });
+  autoUpdater.on('update-downloaded', () => {
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('update:ready');
+    }
+  });
+  autoUpdater.on('error', () => {}); // silence update errors
+} catch(e) {} // not available in dev mode
+
 // ── License state ──────────────────────────────────────────────────────────
 let licenseValid = false;
 
@@ -96,6 +120,11 @@ app.whenReady().then(async () => {
     if (licenseValid) {
       win.webContents.send('license:valid');
 
+      // Check for updates after license is valid
+      if (app.isPackaged && autoUpdater) {
+        setTimeout(() => { try { autoUpdater.checkForUpdates(); } catch(e) {} }, 3000);
+      }
+
       const checkLicense = async () => {
         if (!licenseValid || !win || win.isDestroyed()) return;
         const check = await validateSavedLicense().catch(() => null);
@@ -123,6 +152,10 @@ ipcMain.on('win:minimize', () => win?.minimize());
 ipcMain.on('win:maximize', () => win?.isMaximized() ? win.unmaximize() : win?.maximize());
 ipcMain.on('win:close', () => win?.close());
 ipcMain.on('win:is-maximized', e => { e.returnValue = win?.isMaximized() ?? false; });
+
+// ── Auto update IPC ────────────────────────────────────────────────────────
+ipcMain.on('update:download', () => { try { autoUpdater?.downloadUpdate(); } catch(e) {} });
+ipcMain.on('update:install',  () => { try { autoUpdater?.quitAndInstall(); } catch(e) {} });
 
 // ── Secure Folder unlock detection ────────────────────────────────────────
 

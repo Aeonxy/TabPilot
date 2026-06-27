@@ -56,13 +56,10 @@ contextBridge.exposeInMainWorld('td', {
 
   // Secure Folder via scrcpy window overlay
   sfLaunchScrcpy:  (opts) => ipcRenderer.invoke('sf:launch-scrcpy', opts),
-  sfStopScrcpy:    (tabId) => ipcRenderer.invoke('sf:stop-scrcpy', tabId),
-  sfStartCapture:  (opts) => ipcRenderer.invoke('sf:start-capture', opts),
-  sfStopCapture:   (tabId) => ipcRenderer.invoke('sf:stop-capture', tabId),
-  sfReposition:    (opts) => ipcRenderer.invoke('sf:reposition', opts),
-  sfShowWindow:    (hwnd) => ipcRenderer.invoke('sf:show-window', hwnd),
-  sfHideWindow:    (hwnd) => ipcRenderer.invoke('sf:hide-window', hwnd),
-  onSfReposition:  (cb) => ipcRenderer.on('sf:reposition-needed', () => cb()),
-  onSfMinimize:    (cb) => ipcRenderer.on('sf:win-minimize', () => cb()),
-  onSfRestore:     (cb) => ipcRenderer.on('sf:win-restore', () => cb()),
+  // Auto update
+  onUpdateAvailable: (cb) => ipcRenderer.on('update:available', (_e, d) => cb(d)),
+  onUpdateProgress:  (cb) => ipcRenderer.on('update:progress',  (_e, d) => cb(d)),
+  onUpdateReady:     (cb) => ipcRenderer.on('update:ready',     () => cb()),
+  downloadUpdate:    ()   => ipcRenderer.send('update:download'),
+  installUpdate:     ()   => ipcRenderer.send('update:install'),
 });

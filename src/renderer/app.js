@@ -2539,3 +2539,41 @@ if (!localStorage.getItem('tabpilot:welcomed')) {
   localStorage.setItem('tabpilot:welcomed', '1');
   setTimeout(() => openHelpModal(), 500);
 }
+
+// ── Auto update ────────────────────────────────────────────────────────────
+let _updateBanner = null;
+
+window.td.onUpdateAvailable(({ version }) => {
+  if (_updateBanner) return;
+  _updateBanner = document.createElement('div');
+  _updateBanner.id = 'update-banner';
+  _updateBanner.style.cssText = 'position:fixed;bottom:16px;right:16px;background:#1a2a1a;border:1px solid #3a7a3a;border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:12px;z-index:9998;font-size:13px;color:#fff;box-shadow:0 4px 20px rgba(0,0,0,.4)';
+  _updateBanner.innerHTML = `
+    <span>🚀 Update available — <strong>v${version}</strong></span>
+    <button id="update-dl-btn" style="background:#2a7a2a;color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer">Download</button>
+    <button id="update-dismiss" style="background:transparent;color:#888;border:none;font-size:16px;cursor:pointer;padding:0 4px">×</button>`;
+  document.body.appendChild(_updateBanner);
+
+  $('update-dl-btn').onclick = () => {
+    $('update-dl-btn').textContent = 'Downloading…';
+    $('update-dl-btn').disabled = true;
+    window.td.downloadUpdate();
+  };
+  $('update-dismiss').onclick = () => { _updateBanner?.remove(); _updateBanner = null; };
+});
+
+window.td.onUpdateProgress(({ percent }) => {
+  const btn = $('update-dl-btn');
+  if (btn) btn.textContent = `${percent}%`;
+});
+
+window.td.onUpdateReady(() => {
+  if (_updateBanner) {
+    _updateBanner.innerHTML = `
+      <span>✅ Update ready to install</span>
+      <button id="update-install-btn" style="background:#2a5cdb;color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer">Restart & Install</button>
+      <button id="update-dismiss2" style="background:transparent;color:#888;border:none;font-size:16px;cursor:pointer;padding:0 4px">×</button>`;
+    $('update-install-btn').onclick = () => window.td.installUpdate();
+    $('update-dismiss2').onclick = () => { _updateBanner?.remove(); _updateBanner = null; };
+  }
+});
