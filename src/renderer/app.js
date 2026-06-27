@@ -2605,23 +2605,26 @@ $('nav-help').onclick    = () => { closePanel(); openHelpModal(); };
 $('nav-bug').onclick     = () => { closePanel(); openBugModal(); };
 $('nav-account').onclick = () => {
   if(state.panel==='account'){closePanel();return;}
-  openPanelWith('account','About',`
-    <div class="ps" style="text-align:center;padding:20px 0">
-      <div style="font-size:16px;font-weight:700;color:var(--t1);margin-bottom:4px">TabPilot</div>
-      <div style="font-size:11px;color:var(--t3);margin-bottom:6px">v1.0.0</div>
-      <div style="font-size:11px;color:var(--t3);margin-bottom:18px">
-        Powered by <a href="#" onclick="window.td.openExternal('https://github.com/Genymobile/scrcpy/releases/tag/v4.0');return false;"
-          style="color:var(--acc2);text-decoration:none" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">scrcpy v4.0</a>
-      </div>
-      <div style="font-size:12px;color:var(--t2);line-height:2">
-        Android multi-instance mirroring<br><br>
-        Created by<br>
-        <strong style="color:var(--acc2);font-size:14px">Aeonxy</strong><br>
-        Konnichiwa Leader (Brutas/Blair)<br>
-        Built with <strong style="color:var(--acc2)">Claude AI</strong><br><br>
-        © 2026 Aeonxy. All rights reserved.
-      </div>
-    </div>`);
+  window.td.getVersion().then(version => {
+    openPanelWith('account','About',`
+      <div class="ps" style="text-align:center;padding:20px 0">
+        <div style="font-size:16px;font-weight:700;color:var(--t1);margin-bottom:4px">TabPilot</div>
+        <div style="font-size:11px;color:var(--t3);margin-bottom:6px">v${version}</div>
+        <div style="font-size:11px;color:var(--t3);margin-bottom:6px">
+          Powered by <a href="#" onclick="window.td.openExternal('https://github.com/Genymobile/scrcpy/releases/tag/v4.0');return false;"
+            style="color:var(--acc2);text-decoration:none" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">scrcpy v4.0</a>
+        </div>
+        <div id="about-update-status" style="font-size:11px;color:#4caf82;margin-bottom:18px">✓ Up to date</div>
+        <div style="font-size:12px;color:var(--t2);line-height:2">
+          Android multi-instance mirroring<br><br>
+          Created by<br>
+          <strong style="color:var(--acc2);font-size:14px">Aeonxy</strong><br>
+          Konnichiwa Leader (Brutas/Blair)<br>
+          Built with <strong style="color:var(--acc2)">Claude AI</strong><br><br>
+          © 2026 Aeonxy. All rights reserved.
+        </div>
+      </div>`);
+  });
 };
 
 $('win-min').onclick   = () => window.td.minimize();
@@ -2646,6 +2649,12 @@ if (!localStorage.getItem('tabpilot:welcomed')) {
 let _updateBanner = null;
 
 window.td.onUpdateAvailable(({ version }) => {
+  // Update About panel status if open
+  const statusEl = $('about-update-status');
+  if (statusEl) {
+    statusEl.style.color = '#f0a05b';
+    statusEl.textContent = `↑ v${version} available`;
+  }
   if (_updateBanner) return;
   _updateBanner = document.createElement('div');
   _updateBanner.id = 'update-banner';

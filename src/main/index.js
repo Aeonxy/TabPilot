@@ -152,6 +152,7 @@ ipcMain.on('win:minimize', () => win?.minimize());
 ipcMain.on('win:maximize', () => win?.isMaximized() ? win.unmaximize() : win?.maximize());
 ipcMain.on('win:close', () => win?.close());
 ipcMain.on('win:is-maximized', e => { e.returnValue = win?.isMaximized() ?? false; });
+ipcMain.handle('app:version', () => app.getVersion());
 
 // ── Auto update IPC ────────────────────────────────────────────────────────
 ipcMain.on('update:download', () => { try { autoUpdater?.downloadUpdate(); } catch(e) {} });

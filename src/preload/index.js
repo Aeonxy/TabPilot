@@ -56,6 +56,7 @@ contextBridge.exposeInMainWorld('td', {
 
   // Secure Folder via scrcpy window overlay
   sfLaunchScrcpy:  (opts) => ipcRenderer.invoke('sf:launch-scrcpy', opts),
+  getVersion:        ()   => ipcRenderer.invoke('app:version'),
   // Auto update
   onUpdateAvailable: (cb) => ipcRenderer.on('update:available', (_e, d) => cb(d)),
   onUpdateProgress:  (cb) => ipcRenderer.on('update:progress',  (_e, d) => cb(d)),
