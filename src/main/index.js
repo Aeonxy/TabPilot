@@ -797,6 +797,8 @@ async function startMirror(opts) {
     stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true,
   });
   let displayId = 0;
+  let displayWidth = w;
+  let displayHeight = h;
   proc.stdout.on('data', d => {
     const msg = d.toString().trim();
     const m = msg.match(/New display:\s*(\d+)x(\d+).*\(id=(\d+)\)/);
@@ -829,8 +831,6 @@ async function startMirror(opts) {
   let pBuf = Buffer.alloc(0);
   let hDone = false;
   const H = 68;
-  let displayWidth = w;
-  let displayHeight = h;
 
   videoSock.on('data', chunk => {
     if (!hDone) {

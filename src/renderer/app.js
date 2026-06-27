@@ -626,6 +626,25 @@ function closePanel() {
 }
 $('panel-close').onclick = closePanel;
 
+// Close panel on click outside — but not when zones or macro are active
+document.addEventListener('mousedown', e => {
+  if (!state.panel) return;
+  if (panelEl.classList.contains('hidden')) return;
+  // Clicked inside the panel
+  if (panelEl.contains(e.target)) return;
+  // Clicked a nav button (let it toggle normally)
+  if (e.target.closest('.nav-btn') || e.target.closest('#topbar-left') || e.target.closest('#topbar-right')) return;
+  // Shortcuts: don't close if zone editor, zone mover or key capture dialog are active
+  if (state.panel === 'shortcuts') {
+    if ($('zone-done-btn') || document.querySelector('.key-capture-dialog')) return;
+  }
+  // Macro: don't close if position picking is active
+  if (state.panel === 'macro') {
+    if ($('macro-done-btn')) return;
+  }
+  closePanel();
+}, true);
+
 // ── Help modal ─────────────────────────────────────────────────────────────
 function openBugModal() {
   const backdrop = document.createElement('div');
@@ -1231,6 +1250,9 @@ function closeSfPanel() {
 
 function closeModal() {
   backdropEl.classList.add('hidden');
+  MULTI_SEL.clear();
+  modalLaunch.textContent = 'Launch';
+  modalLaunch.disabled = true;
   focusActiveCanvas();
 }
 
@@ -1241,10 +1263,11 @@ function renderModalDevices() {
     const warming = ws && !ws.done;
     const ready = ws && ws.done;
     const progress = ws ? ws.progress : 0;
+    const devSelCount = getDeviceSel(d.id).size;
     return `<div class="dev-card${d.id===state.modalDevice?.id?' on':''}" data-id="${d.id}">
       <span class="dev-dot"></span>
       <div style="flex:1">
-        <div class="dev-name">${d.model}</div>
+        <div class="dev-name">${d.model}${devSelCount > 0 ? ` <span style="background:var(--acc);color:#fff;border-radius:10px;font-size:10px;padding:1px 6px;margin-left:4px">${devSelCount}</span>` : ''}</div>
         <div class="dev-id">${d.id}</div>
         <div class="warmup-bar-wrap">
           ${ready
@@ -1278,9 +1301,10 @@ function renderModalDevices() {
   modalDevs.querySelectorAll('.dev-card').forEach(el => {
     el.onclick = async () => {
       state.modalDevice = state.devices.find(d=>d.id===el.dataset.id);
-      state.modalApp = null; modalLaunch.disabled = true;
+      state.modalApp = null;
       if (state.modalDevice) await loadAllUserApps(state.modalDevice.id);
       renderModalDevices(); renderModalApps(modalSearch.value);
+      updateLaunchBtn();
       updateSfButton();
     };
   });
@@ -1321,20 +1345,55 @@ async function refreshAppsBackground(devId) {
   } catch {}
 }
 
+// Multi-launch selections: Map<deviceId, Map<pkg:uid, appObj>>
+const MULTI_SEL = new Map();
+
+function getDeviceSel(deviceId) {
+  if (!MULTI_SEL.has(deviceId)) MULTI_SEL.set(deviceId, new Map());
+  return MULTI_SEL.get(deviceId);
+}
+
+function totalSelected() {
+  let n = 0;
+  MULTI_SEL.forEach(m => { n += m.size; });
+  return n;
+}
+
+function updateLaunchBtn() {
+  const n = totalSelected();
+  if (n > 0) {
+    modalLaunch.disabled = false;
+    modalLaunch.textContent = `Launch (${n})`;
+  } else {
+    modalLaunch.disabled = true;
+    modalLaunch.textContent = 'Launch';
+  }
+}
+
 function renderModalApps(q) {
   const apps = state.apps.filter(a => {
     return !q || a.label.toLowerCase().includes(q.toLowerCase()) || a.package.toLowerCase().includes(q.toLowerCase());
   });
-  getModalApps().innerHTML = apps.map(a => {
+  const devId = state.modalDevice?.id;
+  const sel = devId ? getDeviceSel(devId) : new Map();
+
+  let lastClickedIdx = null;
+
+  getModalApps().innerHTML = apps.map((a, i) => {
     const cached = state.iconCache[a.package];
     const b64  = cached?.b64;
     const mime = cached?.mime || 'image/png';
     const color = appColor(a.package);
-    const nick = getNick(a.package, a.userId || 0, state.modalDevice?.id);
+    const nick = getNick(a.package, a.userId || 0, devId);
     const alreadyRunning = state.tabs.some(t =>
-      t.pkg === a.package && t.userId === (a.userId||0) && t.deviceId === state.modalDevice?.id
+      t.pkg === a.package && t.userId === (a.userId||0) && t.deviceId === devId
     );
-    return `<div class="app-row${alreadyRunning ? ' app-running' : ''}${!alreadyRunning && state.modalApp?.package===a.package&&state.modalApp?.userId===a.userId?' on':''}" data-pkg="${a.package}" data-uid="${a.userId}" ${alreadyRunning ? 'data-running="1"' : ''}>
+    const key = `${a.package}:${a.userId||0}`;
+    const checked = sel.has(key);
+    return `<div class="app-row${alreadyRunning ? ' app-running' : ''}${checked ? ' on' : ''}" data-pkg="${a.package}" data-uid="${a.userId}" data-idx="${i}" ${alreadyRunning ? 'data-running="1"' : ''}>
+      <div class="app-chk" style="width:18px;height:18px;border-radius:5px;border:2px solid ${checked?'var(--acc)':'var(--bd2)'};background:${checked?'var(--acc)':'transparent'};flex-shrink:0;display:flex;align-items:center;justify-content:center;margin-right:8px;pointer-events:none">
+        ${checked?'<svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>':''}
+      </div>
       <div class="app-ico" style="background:${b64?'transparent':color}" data-ico-pkg="${a.package}">
         ${b64?`<img src="data:${mime};base64,${b64}" style="width:100%;height:100%;object-fit:cover;border-radius:10px">`:`<span>${a.label.charAt(0).toUpperCase()}</span>`}
       </div>
@@ -1347,14 +1406,41 @@ function renderModalApps(q) {
         : `<span class="app-user">${a.userLabel}</span>`}
     </div>`;
   }).join('');
+
   getModalApps().onclick = e => {
     const row = e.target.closest('.app-row');
     if (!row || row.dataset.running === '1') return;
     const pkg = row.dataset.pkg, uid = +row.dataset.uid;
-    state.modalApp = apps.find(a => a.package===pkg && a.userId===uid) || null;
-    modalLaunch.disabled = !state.modalApp;
-    getModalApps().querySelectorAll('.app-row:not([data-running])').forEach(x => x.classList.remove('on'));
-    row.classList.add('on');
+    const idx = +row.dataset.idx;
+    const key = `${pkg}:${uid}`;
+    const app = apps.find(a => a.package===pkg && a.userId===uid);
+    if (!app) return;
+
+    if (e.shiftKey && lastClickedIdx !== null) {
+      // Shift+click: select range
+      const from = Math.min(lastClickedIdx, idx);
+      const to   = Math.max(lastClickedIdx, idx);
+      for (let i = from; i <= to; i++) {
+        const a = apps[i];
+        if (!a) continue;
+        const k = `${a.package}:${a.userId||0}`;
+        const running = state.tabs.some(t => t.pkg===a.package && t.userId===(a.userId||0) && t.deviceId===devId);
+        if (!running) sel.set(k, a);
+      }
+    } else if (e.ctrlKey || e.metaKey) {
+      // Ctrl+click: toggle
+      if (sel.has(key)) sel.delete(key);
+      else sel.set(key, app);
+      lastClickedIdx = idx;
+    } else {
+      // Regular click: toggle single
+      if (sel.has(key)) sel.delete(key);
+      else sel.set(key, app);
+      lastClickedIdx = idx;
+    }
+
+    updateLaunchBtn();
+    renderModalApps(q);
   };
 }
 modalSearch.oninput = () => renderModalApps(modalSearch.value);
@@ -1364,7 +1450,17 @@ backdropEl.onclick = e => { if(e.target===backdropEl) { closeModal(); } };
 $('modal-sf-btn')?.addEventListener('click', openSfPanel);
 
 modalLaunch.onclick = () => {
-  if (state.modalApp && state.modalDevice) { closeModal(); launchMirror(state.modalApp, state.modalDevice); }
+  const total = totalSelected();
+  if (total === 0) return;
+  // Save selections before closeModal clears them
+  const toLaunch = [];
+  MULTI_SEL.forEach((appMap, deviceId) => {
+    const device = state.devices.find(d => d.id === deviceId);
+    if (!device) return;
+    appMap.forEach(app => toLaunch.push({ app, device }));
+  });
+  closeModal();
+  toLaunch.forEach(({ app, device }) => launchMirror(app, device));
 };
 
 // ── Tabs ───────────────────────────────────────────────────────────────────
@@ -1827,6 +1923,9 @@ function bindCanvasInput(tabId, canvas) {
   }
 
   canvas.addEventListener('keydown', e => {
+    // Tab key — disable completely to avoid bugging apps
+    if (e.key === 'Tab') { e.preventDefault(); e.stopPropagation(); return; }
+
     // Escape = exit typing/writing mode for this tab
     if (e.key==='Escape' && !e.ctrlKey && !e.metaKey) {
       e.preventDefault(); e.stopPropagation();
@@ -2334,6 +2433,9 @@ window.td.onError(({ tabId }) => updateTabState(tabId,'error'));
 
 // NAVIGATION shortcuts — always active, capture phase fires BEFORE canvas keydown
 document.addEventListener('keydown', e => {
+  // Block Tab completely everywhere
+  if (e.key === 'Tab') { e.preventDefault(); e.stopPropagation(); return; }
+
   const inInput = ['INPUT','TEXTAREA'].includes(document.activeElement?.tagName);
   if (inInput) return;
 

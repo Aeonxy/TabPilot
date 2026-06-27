@@ -44,8 +44,9 @@ canvas,canvas:focus{outline:none;}
 .nav-btn.on{background:var(--act);color:var(--t1)}
 
 #topbar-right button{
-  width:48px;height:var(--top);border:none;background:none;
-  color:var(--t2);font-size:17px;transition:background .12s,color .12s;
+  width:46px;height:var(--top);border:none;background:none;
+  color:var(--t2);display:flex;align-items:center;justify-content:center;
+  transition:background .12s,color .12s;
 }
 #topbar-right button:hover{background:var(--hov);color:var(--t1)}
 #win-close:hover{background:#e81123!important;color:#fff!important}
@@ -73,8 +74,8 @@ canvas,canvas:focus{outline:none;}
 .tab.running .tab-dot{background:#aaa;animation:pulse 2s infinite}
 .tab.error .tab-dot{background:#e05c5c}
 .tab-name{flex:1;min-width:0;white-space:nowrap}
-.tab-x{background:none;border:none;color:var(--t3);font-size:14px;
-  padding:1px 3px;border-radius:3px;line-height:1;opacity:0}
+.tab-x{background:none;border:none;color:var(--t3);font-size:16px;
+  padding:2px 5px;border-radius:3px;line-height:1;opacity:0;cursor:pointer}
 .tab:hover .tab-x{opacity:1}
 .tab-x:hover{color:var(--t1);background:var(--act)}
 
