@@ -808,6 +808,9 @@ function updateMacroStatus() { updateRecordStatus(); }
 
 function focusActiveCanvas() {
   if (!state.activeTab) return;
+  // Don't steal focus if user is typing in an input or dialog
+  const ae = document.activeElement;
+  if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.closest('.key-capture-dialog'))) return;
   const canvas = $('canvas-' + state.activeTab);
   if (canvas && canvas.style.display !== 'none') {
     canvas.focus({ preventScroll: true });
@@ -817,7 +820,6 @@ function focusActiveCanvas() {
 
 // ── Zone system ────────────────────────────────────────────────────────────
 const TAB_ZONES = new Map(); // tabId → zones (per instance)
-const WARMUP_STATE = new Map(); // deviceId → { done, progress, startedAt, duration }
 const APPS_CACHE   = new Map(); // deviceId → { apps, users }
 const NICK_CACHE   = new Map(); // "pkg:userId:deviceId" → nickname
 
@@ -2074,10 +2076,6 @@ function openModal() {
   const _mcancel = $('modal-cancel'); if (_mcancel) _mcancel.textContent = t('cancel');
   if (modalSearch) modalSearch.placeholder = t('searchApp');
   if (modalLaunch) modalLaunch.textContent = t('launch');
-  // Hide app section if selected device is still warming up
-  const _selWs = state.modalDevice ? WARMUP_STATE.get(state.modalDevice.id) : null;
-  const _appSec = $('modal-app-section');
-  if (_appSec) _appSec.style.display = (!_selWs || _selWs.done) ? '' : 'none';
   // Load/refresh apps in background
   if (state.modalDevice) loadAllUserApps(state.modalDevice.id);
 }
@@ -2346,44 +2344,23 @@ function closeModal() {
 function renderModalDevices() {
   const online = state.devices.filter(d=>d.state==='device');
   modalDevs.innerHTML = online.map(d => {
-    const ws = WARMUP_STATE.get(d.id);
-    const warming = ws && !ws.done;
-    const ready = ws && ws.done;
-    const progress = ws ? ws.progress : 0;
     const devSelCount = getDeviceSel(d.id).size;
     return `<div class="dev-card${d.id===state.modalDevice?.id?' on':''}" data-id="${d.id}">
       <span class="dev-dot"></span>
       <div style="flex:1">
         <div class="dev-name">${d.model}${devSelCount > 0 ? ` <span style="background:var(--acc);color:#fff;border-radius:10px;font-size:10px;padding:1px 6px;margin-left:4px">${devSelCount}</span>` : ''}</div>
         <div class="dev-id">${d.id}</div>
-        <div class="warmup-bar-wrap">
-          ${ready
-            ? `<span class="warmup-ready">${t('deviceReady')}</span>`
-            : warming
-              ? `<div class="warmup-bar"><div class="warmup-fill" style="width:${progress}%"></div></div>
-                 <span class="warmup-label">${t('settingUp')} ${progress}%</span>`
-              : `<span class="warmup-label">${t('settingUp')}</span>`
-          }
-        </div>
+
       </div>
       ${d.id===state.modalDevice?.id?'':''}
     </div>`;
   }).join('') || '<p style="font-size:12px;color:var(--t3)">No devices found.</p>';
 
-  // Enable/disable launch and SF based on selected device warmup state
-  const selWs = state.modalDevice ? WARMUP_STATE.get(state.modalDevice.id) : null;
-  const selReady = !selWs || selWs.done;
   const sfBtn = $('modal-sf-btn');
   const appSection = $('modal-app-section');
-  if (!selReady) {
-    modalLaunch.disabled = true;
-    if (sfBtn) { sfBtn.disabled = true; sfBtn.style.opacity = '0.4'; sfBtn.style.pointerEvents = 'none'; }
-    if (appSection) appSection.style.display = 'none';
-  } else {
-    modalLaunch.disabled = !state.modalApp;
-    if (sfBtn) { sfBtn.disabled = false; sfBtn.style.opacity = ''; sfBtn.style.pointerEvents = ''; }
-    if (appSection) appSection.style.display = '';
-  }
+  modalLaunch.disabled = !state.modalApp;
+  if (sfBtn) { sfBtn.disabled = false; sfBtn.style.opacity = ''; sfBtn.style.pointerEvents = ''; }
+  if (appSection) appSection.style.display = '';
 
   modalDevs.querySelectorAll('.dev-card').forEach(el => {
     el.onclick = async () => {
@@ -2448,27 +2425,12 @@ function totalSelected() {
 
 function updateLaunchBtn() {
   const n = totalSelected();
-  // Never enable launch while the currently selected device is still
-  // warming up - check the real WARMUP_STATE instead of only relying on
-  // onWarmupStart/onWarmupDone events, which can be missed (e.g. device
-  // reconnects without re-triggering warmup, or the event arrives before
-  // this device became the selected one in the modal).
-  const devId = state.modalDevice?.id;
-  const ws = devId ? WARMUP_STATE.get(devId) : null;
-  // Safety net: if warmup has been "in progress" for way longer than its
-  // expected duration, treat it as done rather than blocking launch forever -
-  // covers the case where onWarmupDone never arrives (missed event, device
-  // reconnect, etc).
-  const warmupStale = ws && !ws.done && ws.startedAt &&
-    (Date.now() - ws.startedAt) > (ws.duration || 10000) * 2 + 5000;
-  const stillWarming = ws && !ws.done && !warmupStale;
-
-  if (n > 0 && !stillWarming) {
+  if (n > 0) {
     modalLaunch.disabled = false;
     modalLaunch.textContent = `Launch (${n})`;
   } else {
     modalLaunch.disabled = true;
-    modalLaunch.textContent = stillWarming ? 'Launch' : 'Launch';
+    modalLaunch.textContent = 'Launch';
   }
 }
 
@@ -2667,7 +2629,11 @@ function showTabContextMenu(tabId, x, y) {
     focusActiveCanvas();
   }
 
-  menu.querySelector('#ctx-rename').onclick = () => { menu.remove(); startRename(tabId); };
+  menu.querySelector('#ctx-rename').onclick = () => {
+    document.removeEventListener('click', onOutsideClick);
+    menu.remove();
+    startRename(tabId);
+  };
   menu.querySelector('#ctx-close').onclick  = () => { closeMenuAndRestoreFocus(); closeTab(tabId); };
 
   const slider = menu.querySelector('#ctx-vol-slider');
@@ -4726,10 +4692,6 @@ async function loadDevices() {
 
     state.devices = devices;
 
-    // Warmup encoder for all online devices (new or already connected)
-    online.forEach(d => {
-      window.td.warmupDevice(d.id).catch(() => {});
-    });
 
     // Update status text
     emptyStatus.textContent = online.length
@@ -4779,50 +4741,6 @@ async function loadDevices() {
 
 // Poll for device changes every 3 seconds
 // ── Warmup events ──────────────────────────────────────────────────────────
-window.td.onWarmupStart(({ deviceId, duration }) => {
-  WARMUP_STATE.set(deviceId, { done: false, progress: 0, startedAt: Date.now(), duration });
-  const interval = setInterval(() => {
-    const s = WARMUP_STATE.get(deviceId);
-    if (!s || s.done) { clearInterval(interval); return; }
-    s.progress = Math.min(99, Math.round((Date.now() - s.startedAt) / s.duration * 100));
-    // Update in real time — just the bar and percentage text
-    const card = document.querySelector(`.dev-card[data-id="${deviceId}"]`);
-    if (!card) return;
-    const fill = card.querySelector('.warmup-fill');
-    const label = card.querySelector('.warmup-label');
-    if (fill) fill.style.width = s.progress + '%';
-    if (label) label.textContent = `Setting up the device… ${s.progress}%`;
-    // Keep launch/SF disabled and hide app section if selected device
-    if (state.modalDevice?.id === deviceId) {
-      modalLaunch.disabled = true;
-      const sfBtn = $('modal-sf-btn');
-      if (sfBtn) { sfBtn.disabled = true; sfBtn.style.opacity = '0.4'; sfBtn.style.pointerEvents = 'none'; }
-      const appSection = $('modal-app-section');
-      if (appSection) appSection.style.display = 'none';
-    }
-  }, 250);
-});
-
-window.td.onWarmupDone(({ deviceId }) => {
-  const s = WARMUP_STATE.get(deviceId) || {};
-  s.done = true; s.progress = 100;
-  WARMUP_STATE.set(deviceId, s);
-  // Update card UI to Ready
-  const card = document.querySelector(`.dev-card[data-id="${deviceId}"]`);
-  if (card) {
-    const wrap = card.querySelector('.warmup-bar-wrap');
-    if (wrap) wrap.innerHTML = '<span class="warmup-ready">✓ Ready</span>';
-  }
-  // Re-enable launch/SF and show app section if this is the selected device
-  if (state.modalDevice?.id === deviceId) {
-    modalLaunch.disabled = !state.modalApp;
-    const sfBtn = $('modal-sf-btn');
-    if (sfBtn) { sfBtn.disabled = false; sfBtn.style.opacity = ''; sfBtn.style.pointerEvents = ''; }
-    const appSection = $('modal-app-section');
-    if (appSection) appSection.style.display = '';
-  }
-});
-
 setInterval(loadDevices, 3000);
 
 // ── Nav ────────────────────────────────────────────────────────────────────

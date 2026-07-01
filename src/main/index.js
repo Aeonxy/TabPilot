@@ -1137,51 +1137,6 @@ function freePort() {
   });
 }
 
-// ── Encoder warmup ─────────────────────────────────────────────────────────
-const _warmedDevices = new Set();
-const WARMUP_MAX = 90000;
-
-async function warmupEncoder(deviceId) {
-  if (_warmedDevices.has(deviceId)) return;
-  _warmedDevices.add(deviceId);
-  const send = (event, data) => { if (win && !win.isDestroyed()) win.webContents.send(event, data); };
-  send('warmup:start', { deviceId, duration: WARMUP_MAX });
-  const finish = () => { send('warmup:done', { deviceId }); };
-  try {
-    const jar = serverPath();
-    if (!jar) { finish(); return; }
-    try { execFileSync(binPath('adb'), ['-s', deviceId, 'push', jar, '/data/local/tmp/scrcpy-server'], { timeout: 10000 }); } catch {}
-    const scid = Math.floor(Math.random() * 0xffff).toString(16).padStart(4,'0');
-    const port = await freePort();
-    try { execFileSync(binPath('adb'), ['-s', deviceId, 'reverse', `localabstract:scrcpy_${scid}`, `tcp:${port}`], { timeout: 5000 }); } catch { finish(); return; }
-    const srvVersion = serverVersion();
-    const cmd = [
-      `CLASSPATH=/data/local/tmp/scrcpy-server`,
-      `app_process / com.genymobile.scrcpy.Server ${srvVersion}`,
-      `scid=${scid}`, 'log_level=error', 'audio=false',
-      'video_codec=h264', 'max_fps=10', 'video_bit_rate=500000',
-      'new_display=540x960/240', 'video_codec_options=i-frame-interval=1',
-      'vd_system_decorations=false',
-    ].join(' ');
-    const proc = spawn(binPath('adb'), ['-s', deviceId, 'shell', cmd], { stdio: 'ignore', windowsHide: true });
-    const srv = net.createServer(sock => {
-      sock.once('data', () => {
-        sock.destroy();
-        try { srv.close(); proc.kill(); } catch {}
-        try { execFileSync(binPath('adb'), ['-s', deviceId, 'reverse', '--remove', `localabstract:scrcpy_${scid}`], { timeout: 2000 }); } catch {}
-        finish();
-      });
-      sock.on('error', () => {});
-    });
-    srv.listen(port, '127.0.0.1');
-    setTimeout(() => {
-      try { srv.close(); proc.kill(); } catch {}
-      try { execFileSync(binPath('adb'), ['-s', deviceId, 'reverse', '--remove', `localabstract:scrcpy_${scid}`], { timeout: 2000 }); } catch {}
-      finish();
-    }, WARMUP_MAX);
-  } catch { finish(); }
-}
-ipcMain.handle('device:warmup', async (_e, deviceId) => { warmupEncoder(deviceId); return true; });
 function pkgLabel(pkg) {
   const l = pkg.split('.').pop() || pkg;
   return l.charAt(0).toUpperCase() + l.slice(1);
