@@ -115,7 +115,7 @@ app.whenReady().then(async () => {
 
   // Wait for page to load, THEN validate license
   win.webContents.once('did-finish-load', async () => {
-    const result = await validateSavedLicense().catch(() => ({ valid: false }));
+    const result = await validateSavedLicense().catch(() => ({ valid: true, offline: true }));
     licenseValid = result.valid;
     if (licenseValid) {
       win.webContents.send('license:valid');
@@ -129,16 +129,23 @@ app.whenReady().then(async () => {
 
       const checkLicense = async () => {
         if (!licenseValid || !win || win.isDestroyed()) return;
-        const check = await validateSavedLicense().catch(() => null);
-        if (check && !check.valid) {
+        let check;
+        try {
+          check = await validateSavedLicense();
+        } catch(e) {
+          // Network error — don't revoke, give benefit of the doubt
+          return;
+        }
+        // Only revoke if server explicitly says invalid (not a network error)
+        if (check && check.valid === false && !check.offline) {
           licenseValid = false;
           clearLicenseLocal();
           win.webContents.send('license:revoked');
         }
       };
 
-      // Check every 10 seconds regardless
-      setInterval(checkLicense, 10 * 1000);
+      // Check every 10 minutes (not 10 seconds — too aggressive)
+      setInterval(checkLicense, 10 * 60 * 1000);
 
     } else {
       win.webContents.send('license:required', result.error || null);
@@ -426,58 +433,92 @@ ipcMain.handle('adb:shell', async (_e, deviceId, cmd) => adb(['-s', deviceId, 's
 ipcMain.handle('mirror:start', async (_e, opts) => startMirror(opts));
 ipcMain.handle('mirror:stop', async (_e, tabId) => { stopSession(tabId); return true; });
 
+// Controls the OS-level audio volume of the per-device scrcpy audio process.
+// Because audio is captured by a separate scrcpy instance (--no-video) that
+// plays back directly through the OS mixer, it bypasses the renderer's Web
+// Audio stack entirely - so gain nodes in the renderer have no effect.
+// We control it here via the Windows Audio Session API (WASAPI) using a
+// PowerShell script that targets the specific process by PID.
+ipcMain.handle('device:set-audio', async (_e, { deviceId, volume, muted }) => {
+  const entry = deviceAudioProcs.get(deviceId);
+  if (!entry || !entry.proc) { console.log('[TabPilot] setDeviceAudio: no audio proc for', deviceId); return false; }
+  const pid = entry.proc.pid;
+  if (!pid) { console.log('[TabPilot] setDeviceAudio: no PID'); return false; }
+  const level = muted ? 0 : Math.max(0, Math.min(1, volume / 100));
+  console.log(`[TabPilot] setDeviceAudio: deviceId=${deviceId} pid=${pid} level=${level}`);
+  try {
+    const { execFile } = require('child_process');
+    const path = require('path');
+    const script = path.join(path.dirname(binPath('scrcpy')), 'setvol.ps1');
+    const output = await new Promise(resolve => {
+      execFile('powershell', [
+        '-NoProfile', '-ExecutionPolicy', 'Bypass',
+        '-File', script,
+        '-TargetPid', String(pid),
+        '-Level', String(level.toFixed(4))
+      ], { windowsHide: true, timeout: 5000 }, (err, stdout, stderr) => {
+        if (err) console.error('[TabPilot] setvol error:', err.message);
+        if (stdout) console.log('[TabPilot] setvol stdout:', stdout.trim());
+        if (stderr) console.error('[TabPilot] setvol stderr:', stderr.trim());
+        resolve(stdout);
+      });
+    });
+    return true;
+  } catch(e) { console.error('[TabPilot] setDeviceAudio:', e.message); return false; }
+});
+
 // IME counter — tracks how many tabs have keyboard open
 const imeCounterMap = new Map();
 const deviceAudioProcs = new Map(); // deviceId → { proc, refCount } // deviceId → { count, watcher, tabStates }
 
 ipcMain.handle('mirror:watch-ime', (_e, { tabId, deviceId }) => {
+  // We no longer use a polling watcher.
+  // IME detection is done on-demand via mirror:check-ime after each tap.
+  // Just register the tab so deviceId is trackable.
   if (!imeCounterMap.has(deviceId)) {
-    imeCounterMap.set(deviceId, { count: 0, tabStates: new Map() });
+    imeCounterMap.set(deviceId, { lastConfirmed: null, tabStates: new Map() });
   }
-  const state = imeCounterMap.get(deviceId);
-  state.tabStates.set(tabId, false); // register tab, not writing yet
-
-  // One watcher per device
-  if (state.watcher) return true;
-
-  let lastShown = null;
-
-  state.watcher = setInterval(async () => {
-    try {
-      const out = await adb(['-s', deviceId, 'shell', 'dumpsys input_method | grep "mInputShown"']);
-      const shown = out.includes('mInputShown=true');
-
-      if (shown === lastShown) return; // no change
-      lastShown = shown;
-
-      if (shown) {
-        // Keyboard appeared — find which tab is currently active on PC and mark it
-        if (win && !win.isDestroyed()) {
-          win.webContents.send('mirror:ime-open', { deviceId });
-        }
-      } else {
-        // Keyboard disappeared — decrement counter
-        if (win && !win.isDestroyed()) {
-          win.webContents.send('mirror:ime-close', { deviceId });
-        }
-      }
-    } catch(e) {}
-  }, 500);
-
+  imeCounterMap.get(deviceId).tabStates.set(tabId, false);
   return true;
 });
 
+ipcMain.handle('mirror:check-ime', async (_e, { tabId }) => {
+  const session = sessions.get(tabId);
+  if (!session?.deviceId) return;
+  const { deviceId, displayId } = session;
+
+  if (!imeCounterMap.has(deviceId)) {
+    imeCounterMap.set(deviceId, { lastConfirmed: new Map(), tabStates: new Map() });
+  }
+  const imeState = imeCounterMap.get(deviceId);
+  if (!imeState.lastConfirmed) imeState.lastConfirmed = new Map();
+  const lastForDisplay = imeState.lastConfirmed.get(displayId) ?? null;
+
+  try {
+    const out = await adb(['-s', deviceId, 'shell', 'dumpsys input_method 2>/dev/null']);
+
+    // Samsung One UI: each virtual display gets a targetDisplayId entry when IME is active
+    const hasTarget = out.includes(`targetDisplayId=${displayId}`);
+
+    // mIsInputViewShown=true = keyboard is visually rendered on screen
+    const isViewShown = out.includes('mIsInputViewShown=true');
+
+    const shown = hasTarget && isViewShown;
+
+    if (shown === lastForDisplay) return;
+    imeState.lastConfirmed.set(displayId, shown);
+
+    if (win && !win.isDestroyed()) {
+      win.webContents.send(shown ? 'mirror:ime-open' : 'mirror:ime-close', { deviceId });
+    }
+  } catch(e) {}
+});
+
+
 ipcMain.handle('mirror:ime-reopen', async (_e, { tabId }) => {
-  // Reopen keyboard on device by sending a "show IME" control message
   const session = sessions.get(tabId);
   if (!session?.controlSock) return false;
   try {
-    // SC_CONTROL_MSG_TYPE_SET_CLIPBOARD or back-tap to reopen IME
-    // Best way: inject a tap on the focused text field area to re-trigger IME
-    // Send SHOW_IME control message (type 0x14 in scrcpy v3)
-    const buf = Buffer.alloc(2);
-    buf[0] = 0x14; // SC_CONTROL_MSG_TYPE_UHID_CREATE... actually use back+tap
-    // Simpler: use adb to show IME
     return true;
   } catch { return false; }
 });
@@ -757,7 +798,9 @@ ipcMain.handle('mirror:keyevent', async (_e, { tabId, keycode, action, meta }) =
 
 async function startMirror(opts) {
   const { deviceId, appPackage, tabId, resolution = '1920x1080', maxFps = 60 } = opts;
+  const iFrameInterval = opts.iFrameInterval || 3;
   const bitrate = (opts.bitrate || 8) * 1000000;
+  const dpi = opts.dpi || 240;
   const turnScreenOff = opts.turnScreenOff === true;
   const useMainDisplay = opts.useMainDisplay === true;
   const [w, h] = resolution.split('x').map(Number);
@@ -793,7 +836,7 @@ async function startMirror(opts) {
     `video_bit_rate=${bitrate}`,
     useMainDisplay ? null : `new_display=${w}x${h}/240`,
     useMainDisplay ? `max_size=${Math.max(w,h)}` : null,
-    `video_codec_options=i-frame-interval=1`,
+    `video_codec_options=i-frame-interval=${iFrameInterval}`,
     useMainDisplay ? null : `vd_system_decorations=false`,
   ].filter(Boolean).join(' ');
   const proc = spawn(binPath('adb'), ['-s', deviceId, 'shell', cmd], {
@@ -941,8 +984,7 @@ async function startMirror(opts) {
                   deviceAudioProcs.delete(deviceId);
                 });
                 deviceAudioProcs.set(deviceId, { proc: ap, refCount: 1 });
-              } catch(e) {
- }
+              } catch(e) {}
             }
           }
         } catch(e) {

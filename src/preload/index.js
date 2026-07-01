@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('td', {
   // Mirror
   startMirror: (opts)                     => ipcRenderer.invoke('mirror:start', opts),
   stopMirror:  (tabId)                    => ipcRenderer.invoke('mirror:stop',  tabId),
+  setDeviceAudio: (opts)                  => ipcRenderer.invoke('device:set-audio', opts),
   tap:         (opts) => ipcRenderer.invoke('mirror:tap',       opts),
   touchDown:   (opts) => ipcRenderer.invoke('mirror:touch-down', opts),
   touchUp:     (opts) => ipcRenderer.invoke('mirror:touch-up',   opts),
@@ -38,6 +39,7 @@ contextBridge.exposeInMainWorld('td', {
   onImeOpen:  (cb) => { ipcRenderer.on('mirror:ime-open',  (_e, d) => cb(d)); },
   onImeClose: (cb) => { ipcRenderer.on('mirror:ime-close', (_e, d) => cb(d)); },
   watchIme:   (opts) => ipcRenderer.invoke('mirror:watch-ime', opts),
+  checkIme:   (opts) => ipcRenderer.invoke('mirror:check-ime', opts),
   stopImeWatcher: (opts) => ipcRenderer.invoke('mirror:stop-ime-watcher', opts),
   showIme:    (opts) => ipcRenderer.invoke('mirror:show-ime', opts),
   hideIme:    (opts) => ipcRenderer.invoke('mirror:hide-ime', opts),

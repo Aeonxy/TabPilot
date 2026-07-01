@@ -11,19 +11,18 @@
   <!-- Top bar -->
   <div id="topbar">
     <div id="topbar-left">
-      <button class="nav-top" id="btn-new">+ New instance</button>
+      <button id="btn-new" title="New instance">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/></svg>
+      </button>
       <div class="nav-sep"></div>
-      <div class="nav-group">        <button class="nav-btn" id="nav-shortcuts" data-panel="shortcuts">
+      <div class="nav-group">
+        <button class="nav-btn" id="nav-shortcuts" data-panel="shortcuts">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
           Shortcuts
         </button>
         <button class="nav-btn" id="nav-macro" data-panel="macro">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          Macro
-        </button>
-        <button class="nav-btn" id="nav-devices" data-panel="devices">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18.01"/></svg>
-          Devices
+          Record
         </button>
         <button class="nav-btn" id="nav-settings" data-panel="settings">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -43,10 +42,28 @@
         </button>
       </div>
     </div>
-    <div id="topbar-drag" style="flex:1;height:100%;-webkit-app-region:drag"></div>
+    <div id="topbar-drag" style="flex:1;height:100%;-webkit-app-region:drag;display:flex;align-items:center;padding-left:16px">
+      <div id="device-status-pill" class="status-pill hidden" style="-webkit-app-region:no-drag"></div>
+      <div id="macro-status-pill" class="status-pill hidden" style="-webkit-app-region:no-drag"></div>
+      <div id="rec-topbar" style="display:none;align-items:center;gap:8px;-webkit-app-region:no-drag">
+        <div style="width:9px;height:9px;border-radius:50%;background:#e05c5c;flex-shrink:0" id="rec-dot"></div>
+        <span id="rec-timer" style="font-size:14px;font-weight:700;color:var(--t1);font-family:monospace;min-width:72px">00:00.0</span>
+        <span id="rec-tap-count" style="font-size:13px;color:var(--t3)">0 taps</span>
+        <button id="rec-pause-btn" style="height:26px;width:32px;background:var(--elev);border:1px solid var(--bd);border-radius:6px;color:var(--t2);font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center">⏸</button>
+        <button id="rec-stop-btn" style="height:26px;width:32px;background:#e05c5c;border:none;border-radius:6px;color:#fff;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center">⏹</button>
+      </div>
+    </div>
     <div id="topbar-right">
-      <div id="device-status-pill" class="status-pill hidden"></div>
-      <div id="macro-status-pill" class="status-pill hidden"></div>
+      <div style="display:flex;align-items:center;gap:6px;padding:0 8px;height:var(--top);-webkit-app-region:no-drag">
+        <button id="btn-collapse-ui" title="Hide bar (F11)" style="display:flex;align-items:center;justify-content:center;width:28px;height:28px;border:1px solid var(--bd2);border-radius:7px;background:var(--elev);color:var(--t2);cursor:pointer;transition:all .15s;flex-shrink:0">
+          <svg class="collapse-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"></polyline><polyline points="20 10 14 10 14 4"></polyline><line x1="14" y1="10" x2="21" y2="3"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
+          <svg class="expand-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
+        </button>
+        <button id="btn-discord" title="Discord" style="display:flex;align-items:center;justify-content:center;width:28px;height:28px;border:none;border-radius:7px;background:#5865F2;color:#fff;cursor:pointer;transition:filter .15s;flex-shrink:0">
+          <svg width="16" height="12" viewBox="0 0 71 55" fill="#fff" xmlns="http://www.w3.org/2000/svg"><path d="M60.1 4.9A58.5 58.5 0 0 0 45.5.7a.2.2 0 0 0-.2.1 40.7 40.7 0 0 0-1.8 3.7 54 54 0 0 0-16.2 0A37 37 0 0 0 25.5.8a.22.22 0 0 0-.22-.1A58.4 58.4 0 0 0 10.6 4.9a.2.2 0 0 0-.1.08C1.6 17.9-.96 30.6.3 43.1a.24.24 0 0 0 .09.16 58.8 58.8 0 0 0 17.7 8.9.22.22 0 0 0 .24-.08 42 42 0 0 0 3.62-5.88.21.21 0 0 0-.11-.3 38.7 38.7 0 0 1-5.53-2.63.22.22 0 0 1-.02-.36c.37-.28.74-.57 1.1-.86a.21.21 0 0 1 .22-.03c11.6 5.3 24.17 5.3 35.63 0a.21.21 0 0 1 .22.03c.36.29.73.58 1.1.86.12.1.11.29-.02.36a36.3 36.3 0 0 1-5.54 2.63.22.22 0 0 0-.11.3 47.1 47.1 0 0 0 3.61 5.88c.06.08.16.1.25.07a58.6 58.6 0 0 0 17.73-8.9.22.22 0 0 0 .09-.15c1.48-15.3-2.48-28-10.5-39.53a.17.17 0 0 0-.09-.1ZM23.7 35.5c-3.5 0-6.38-3.2-6.38-7.14 0-3.93 2.82-7.13 6.38-7.13 3.59 0 6.43 3.23 6.38 7.13 0 3.94-2.82 7.14-6.38 7.14Zm23.6 0c-3.5 0-6.38-3.2-6.38-7.14 0-3.93 2.82-7.13 6.38-7.13 3.58 0 6.43 3.23 6.37 7.13 0 3.94-2.79 7.14-6.37 7.14Z"/></svg>
+        </button>
+        <div id="lang-picker-wrap" style="display:flex;align-items:center;-webkit-app-region:no-drag"></div>
+      </div>
       <button id="win-min">
         <svg width="12" height="1" viewBox="0 0 12 1" fill="currentColor"><rect width="12" height="1.5" rx="0.75"/></svg>
       </button>
@@ -58,6 +75,9 @@
       </button>
     </div>
   </div>
+
+  <!-- Hidden-UI hover trigger: hover the very top edge to bring the bars back -->
+  <div id="ui-reveal-trigger" style="display:none;position:fixed;top:0;left:0;right:0;height:6px;z-index:200;cursor:pointer" title="Show bar"></div>
 
   <!-- Tab bar -->
   <div id="tabbar">
@@ -89,11 +109,11 @@
   <div id="modal-wrapper">
     <div id="modal">
       <div class="modal-head">
-        <span>Launch an instance</span>
+        <span>${t('launchTitle')}</span>
         <button class="modal-x" id="modal-close">×</button>
       </div>
       <div class="modal-body" id="modal-body">
-        <div class="ml">DEVICE</div>
+        <div class="ml" id="modal-device-lbl">DEVICE</div>
         <div id="modal-devices"></div>
         <div id="modal-app-section">
           <div class="ml" style="margin-top:14px">APPLICATION</div>
@@ -106,6 +126,32 @@
         <button class="btn-sf hidden" id="modal-sf-btn">🔒 Open Secure Folder</button>
         <button class="btn-accent" id="modal-launch" disabled>Launch</button>
       </div>
+    </div>
+    <!-- Preset panel — extension to the right of the modal -->
+    <div id="modal-preset-panel">
+      <div class="modal-head" style="border-bottom:1px solid var(--bd)">
+        <span>Settings</span>
+      </div>
+      <div style="padding:14px;display:flex;flex-direction:column;gap:10px">
+        <div class="ml">PRESET</div>
+        <div id="mp-preset-grid" class="preset-grid"></div>
+        <div class="ml" id="mp-options-lbl" style="margin-top:2px">OPTIONS</div>
+        <div class="srow" style="padding:0">
+          <span class="slbl" id="mp-audio-lbl">Audio</span>
+          <div id="mp-audio-tog"></div>
+        </div>
+        <div class="srow" style="padding:0">
+          <span class="slbl" id="mp-screen-lbl">Turn off screen</span>
+          <div id="mp-screen-tog"></div>
+        </div>
+      </div>
+    </div>
+    <!-- Custom panel — appears when Custom preset is selected -->
+    <div id="modal-custom-panel" style="display:none">
+      <div class="modal-head" style="border-bottom:1px solid var(--bd)">
+        <span>Custom</span>
+      </div>
+      <div style="padding:14px;display:flex;flex-direction:column;gap:8px;overflow-y:auto;overflow-x:hidden" id="mp-custom-section"></div>
     </div>
   </div>
 </div>

@@ -2,7 +2,7 @@
 
 **Multi-instance Android mirroring for Windows.**
 
-Run multiple apps simultaneously on isolated virtual displays via ADB — with shortcuts, macros, audio forwarding, and Samsung Secure Folder support. Built with Electron, WebCodecs, and scrcpy.
+Run multiple apps simultaneously on isolated virtual displays via ADB — with shortcuts, activity auto-tap, audio forwarding, and Samsung Secure Folder support. Built with Electron, WebCodecs, and scrcpy.
 
 ## Features
 
@@ -11,7 +11,7 @@ Run multiple apps simultaneously on isolated virtual displays via ADB — with s
 - **Embedded mirror** — video decoded via WebCodecs and rendered to a `<canvas>` inside each tab
 - **Secure Folder** — full support for Samsung Secure Folder on Android 16 (no root required)
 - **Shortcuts (zones)** — assign keyboard keys to tap zones on the mirror, shared across all instances of the same app
-- **Macro** — auto-tap at a set position every 2 minutes to prevent inactivity
+- **Activity** — auto-tap at a set position every 2 minutes to prevent inactivity
 - **Audio forwarding** — captures device audio output and plays it through your PC speakers
 - **Tab nicknames** — double-click or right-click any tab to rename it
 - **Settings presets** — Ultra (2560×1440), High (1920×1080), Medium (1280×720), Low (960×540)

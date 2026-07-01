@@ -122,9 +122,23 @@ async function validateSavedLicense() {
   if (!saved?.key) return { valid: false };
 
   const deviceId = getDeviceId();
-  const { ok, data } = await supabaseFetch(
-    `/licenses?key=eq.${encodeURIComponent(saved.key)}&select=*`
-  );
+
+  let ok, data, status;
+  try {
+    const result = await supabaseFetch(
+      `/licenses?key=eq.${encodeURIComponent(saved.key)}&select=*`
+    );
+    ok = result.ok; data = result.data; status = result.status;
+  } catch(e) {
+    // Network error — can't reach Supabase, give benefit of the doubt
+    return { valid: true, offline: true };
+  }
+
+  // Server error (5xx, 429 rate limit, etc.) — not a definitive answer, trust local cache
+  if (!ok && status >= 500) return { valid: true, offline: true };
+  if (status === 429) return { valid: true, offline: true };
+
+  // Supabase returned a valid response but license not found
   if (!ok || !Array.isArray(data) || data.length === 0)
     return { valid: false, error: 'License not found.' };
 
