@@ -48,7 +48,7 @@ const BASE = {
   intervalBetween:'Interval between executions', playbackSpeed:'Playback speed',
   save:'Save',
   thisInstance:'This instance', allInstances:'All instances',
-  navNewInstance:'New instance', navCloseTab:'Close instance', navNextTab:'Switch tab →', navPrevTab:'Switch tab ←',
+  navNewInstance:'New instance', navCloseTab:'Close instance', navNextTab:'Switch tab →', navPrevTab:'Switch tab ←', navClosePanel:'Close panel / Exit zone editor',
   navRemapHint:'Click a key to remap it.',
   escFixed:'Escape — Close panel / Exit zone editor (fixed)',
   deviceReady:'✓ Ready', deviceConnected:'devices connected', deviceConnectedOne:'device connected',
@@ -96,10 +96,12 @@ const BASE = {
   u2_title:'Secure Folder', u2_body:'If your Samsung device has Secure Folder, an <strong>Open Secure Folder</strong> button appears in the launch dialog.<br><br>Manually unlock Secure Folder on the device first, then press <strong>Continue</strong>.',
   u3_title:'Touch & gestures', u3_body:'<strong>Click</strong> — tap. <strong>Hold</strong> — long press. <strong>Drag</strong> — swipe. <strong>Scroll</strong> — native scroll. <strong>Ctrl+drag</strong> — pinch zoom.',
   u4_title:'Keyboard & typing', u4_body:'Click the mirror to focus it, then type. Keys mapped to <strong>Shortcuts</strong> trigger zone taps. When the keyboard appears, use the <strong>⌨ Write</strong> button to switch to typing mode.',
-  u5_title:'Shortcuts (zones)', u5_body:'Open <strong>Shortcuts → Actions</strong> and click <strong>Add zones</strong>. Click on the mirror to place a zone, then press a key to assign it. Use <strong>Copy shortcuts</strong> to share them across instances.',
-  u6_title:'Record', u6_body:'Open <strong>Record</strong> and click <strong>● Record</strong>. Perform taps — they are captured with exact timing. Pause/resume or Stop to save. Configure repeat, duration, interval and speed.',
-  u7_title:'Settings', u7_body:'<strong>Presets</strong> — Ultra, High, Medium, Low. <strong>Custom</strong> — configure resolution, FPS, bitrate, DPI and i-frame interval. <strong>Turn off screen</strong> — saves battery while mirroring.',
+  u5_title:'Shortcuts (zones)', u5_body:'Open <strong>Shortcuts → Actions</strong> and click <strong>Add zones</strong>. Click on the mirror to place a zone, then press a key to assign it. Use <strong>Copy shortcuts</strong> to share them across instances. Save and load zone sets via <strong>Shortcuts → Profiles</strong> — profiles store the resolution and DPI they were created with, so a mismatch warning appears if you apply one to a different preset.',
+  u6_title:'Record', u6_body:'Open <strong>Record</strong> and click <strong>● Record</strong>. Perform taps — they are captured with exact timing. Stop to save. Enable <strong>This instance</strong> or <strong>All instances</strong> toggles, then press <strong>▶ Play</strong> to start. The button turns into <strong>⏹ Stop</strong> while running. Configure repeat, duration, interval and speed via ⚙.',
+  u7_title:'Settings', u7_body:'<strong>Presets</strong> — Ultra, High, Medium, Low, Eco. <strong>Custom</strong> — configure resolution, FPS, bitrate, DPI and i-frame interval. <strong>Turn off screen</strong> — saves battery. <strong>Auto-reconnect</strong> — automatically restores a mirror that drops unexpectedly. <strong>Show FPS</strong> — displays live FPS on each tab.',
   u8_title:'Navigation shortcuts', u8_body:'Open <strong>Shortcuts → Navigation</strong> to remap: new instance, close, switch tabs. Click a key badge to reassign it.',
+  u9_title:'Broadcast', u9_body:'Click the 📡 button in the topbar (or press <strong>B</strong>) to enter Broadcast mode — every click on the active mirror is sent to all other instances of the same app simultaneously. <strong>Shift+click</strong> broadcasts a single tap without toggling the mode.',
+  u10_title:'Layouts', u10_body:'Click the ⊞ button in the topbar to open the Layout Manager. Save your current set of open instances as a named layout. Restore a layout to reopen all its instances in one click — devices must be connected.',
   u9_title:'Tabs & nicknames', u9_body:'<strong>Double-click</strong> or <strong>right-click</strong> a tab to rename it. Drag to reorder.',
 };
 
@@ -566,7 +568,11 @@ const PRESETS = {
 function defaultSettings() {
   return { preset:'high', performance:{ ...PRESETS.high, iFrameInterval:3, dpi:240 },
     audio:{ enabled:true, codec:'opus', source:'device', volume:80 },
-    device:{ turnScreenOff:true } };
+    device:{ turnScreenOff:true },
+    autoReconnect: true,
+    showFps: false,
+    notifications: true,
+  };
 }
 function loadSettings() {
   try {
@@ -581,6 +587,9 @@ function loadSettings() {
       performance: { ...def.performance, ...presetDefaults, ...saved.performance },
       audio:  { ...def.audio,  ...saved.audio  },
       device: { ...def.device, ...saved.device },
+      autoReconnect: saved.autoReconnect ?? def.autoReconnect,
+      showFps:       saved.showFps       ?? def.showFps,
+      notifications: saved.notifications ?? def.notifications,
     };
   } catch { return defaultSettings(); }
 }
@@ -1117,7 +1126,7 @@ function renderZones(tabId, editMode) {
     const px = offsetX + pos.rx * drawW;
     const py = offsetY + pos.ry * drawH;
     div.style.cssText = `left:${px}px;top:${py}px;width:${ZONE_PX}px;height:${ZONE_PX}px;cursor:grab`;
-    div.innerHTML = `<span class="zone-label">${z.name ? z.key+' · '+z.name : z.key}</span>`;
+    div.innerHTML = `<span class="zone-label">${z.broadcast ? '📡 ' : ''}${z.name ? z.key+' · '+z.name : z.key}</span>`;
 
     // ── Drag to move ──────────────────────────────────────────────
     let dragging = false, dragStartMX, dragStartMY, dragStartRX, dragStartRY;
@@ -1220,6 +1229,7 @@ function showZoneMenu(anchor, tabId, zones, idx, z) {
     closeZoneMenu();
     showKeyDialog(null, captured => {
       zones[idx].key = captured.key;
+      zones[idx].broadcast = captured.broadcast || false;
       setZones(tabId, zones);
       renderZones(tabId, true);
       if (state.panel === 'shortcuts') renderScTab('actions');
@@ -1362,7 +1372,7 @@ function showKeyCapture(tabId, zoneData, onDone) {
 function showKeyReassign(tabId, idx, zone) {
   showKeyDialog(zone, result => {
     const zones = getZones(tabId);
-    zones[idx] = { ...zones[idx], key: result.key, label: result.label || result.key };
+    zones[idx] = { ...zones[idx], key: result.key, label: result.label || result.key, broadcast: result.broadcast || false };
     setZones(tabId, zones);
     renderZones(tabId, false);
     if (state.panel === 'shortcuts') renderScTab('actions');
@@ -1377,6 +1387,11 @@ function showKeyDialog(existing, onSave) {
     <div class="kcd-hint">Press any key…</div>
     <div class="kcd-key" id="kcd-key">${existing ? existing.key : '—'}</div>
     <input class="kcd-label-in" id="kcd-label" placeholder="Zone name (optional)" maxlength="20" value="${existing?.label||''}">
+    <label class="kcd-broadcast-row" style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--t2);cursor:pointer;margin-top:6px">
+      <input type="checkbox" id="kcd-broadcast" ${existing?.broadcast?'checked':''}
+        style="width:14px;height:14px;accent-color:var(--acc);cursor:pointer">
+      Broadcast — tap all active instances
+    </label>
     <div class="kcd-btns">
       <button class="btn-ghost kcd-cancel">Cancel</button>
       <button class="btn-accent kcd-save" ${existing?'':'disabled'}>Save</button>
@@ -1424,7 +1439,7 @@ function showKeyDialog(existing, onSave) {
   dlg.querySelector('.kcd-cancel').onclick = cleanup;
   saveBtn.onclick = () => {
     cleanup();
-    onSave({ key: capturedKey, label: labelIn.value.trim() });
+    onSave({ key: capturedKey, label: labelIn.value.trim(), broadcast: dlg.querySelector('#kcd-broadcast')?.checked || false });
   };
 }
 
@@ -1585,6 +1600,8 @@ function openHelpModal() {
     { icon:'⏺️', title:t('u6_title'), body:t('u6_body') },
     { icon:'⚙️', title:t('u7_title'), body:t('u7_body') },
     { icon:'🔄', title:t('u8_title'), body:t('u8_body') },
+    { icon:'📡', title:t('u9_title'),  body:t('u9_body')  },
+    { icon:'⊞',  title:t('u10_title'), body:t('u10_body') },
     { icon:'🏷️', title:t('u9_title'), body:t('u9_body') },
   ];
 
@@ -1697,6 +1714,7 @@ function buildShortcutsHtml(active = 'nav') {
   return `<div class="sc-tabs">
     <button class="sc-tab${active==='nav'?' on':''}" data-stab="nav">${t('navigation')}</button>
     <button class="sc-tab${active==='actions'?' on':''}" data-stab="actions">${t('actions')}</button>
+    <button class="sc-tab${active==='profiles'?' on':''}" data-stab="profiles">Profiles</button>
   </div><div id="sc-content"></div>`;
 }
 function bindShortcutsEvents(active = 'nav') {
@@ -1708,8 +1726,137 @@ function bindShortcutsEvents(active = 'nav') {
     };
   });
 }
+// ── Shortcut Profiles ──────────────────────────────────────────────────────
+function loadProfiles() {
+  try { return JSON.parse(localStorage.getItem('tabpilot:sc-profiles') || '[]'); } catch { return []; }
+}
+function saveProfiles(profiles) {
+  try { localStorage.setItem('tabpilot:sc-profiles', JSON.stringify(profiles)); } catch {}
+}
+
+function saveCurrentProfile(name) {
+  const tab = state.tabs.find(t => t.id === state.activeTab);
+  if (!tab) return;
+  const zones = TAB_ZONES.get(tab.id) || [];
+  const profiles = loadProfiles();
+  const profile = {
+    id: 'prof-' + Date.now(),
+    name: name.trim(),
+    zones: zones.map(({ thumb, ...z }) => z), // strip thumbnails - they're per-instance
+    preset: state.settings.preset,
+    resolution: state.settings.performance.resolution,
+    dpi: state.settings.performance.dpi,
+    createdAt: Date.now(),
+  };
+  profiles.push(profile);
+  saveProfiles(profiles);
+  toast('Profile saved', `"${profile.name}" — ${zones.length} zones`, 'success');
+  renderScTab('profiles');
+}
+
+function applyProfile(profile) {
+  const tab = state.tabs.find(t => t.id === state.activeTab);
+  if (!tab) return;
+
+  const currentRes  = state.settings.performance.resolution;
+  const currentDpi  = state.settings.performance.dpi;
+  const mismatch    = profile.resolution !== currentRes || profile.dpi !== currentDpi;
+
+  const doApply = () => {
+    const zones = profile.zones.map(clampZone);
+    TAB_ZONES.set(tab.id, zones);
+    saveTabZones(tab.id);
+    ZONE_TAB_POS.delete(tab.id);
+    const canvas = $('canvas-' + tab.id);
+    if (canvas && canvas.width > 0) applyZoneThumbsToTab(tab.id);
+    renderZones(tab.id, false);
+    toast('Profile applied', `"${profile.name}" loaded`, 'success');
+    renderScTab('profiles');
+  };
+
+  if (mismatch) {
+    // Same warning as copy shortcuts — different resolution/DPI
+    const warn = document.createElement('div');
+    warn.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center';
+    warn.innerHTML = `
+      <div style="background:var(--surf);border:1px solid var(--bd2);border-radius:14px;padding:28px 32px;width:420px;display:flex;flex-direction:column;align-items:center;gap:16px;text-align:center">
+        <div style="font-size:32px">⚠️</div>
+        <div style="font-size:16px;font-weight:700;color:var(--t1)">Resolution mismatch</div>
+        <div style="font-size:13px;color:#e05c5c;line-height:1.7;font-weight:600">
+          This profile was created at <strong>${profile.resolution} / DPI ${profile.dpi}</strong>.<br>
+          Current instance is running at <strong>${currentRes} / DPI ${currentDpi}</strong>.<br>
+          Zone positions may not match the intended actions.
+        </div>
+        <div style="font-size:13px;color:var(--t2);line-height:1.6">${t('copyWarning').split('\n').slice(2).join(' ')}</div>
+        <div style="display:flex;gap:10px;justify-content:center">
+          <button id="pmatch-cancel" style="background:var(--elev);color:var(--t2);border:1px solid var(--bd);border-radius:8px;padding:9px 20px;font-size:14px;cursor:pointer">${t('cancel')}</button>
+          <button id="pmatch-confirm" style="background:#2a5cdb;color:#fff;border:none;border-radius:8px;padding:9px 20px;font-size:14px;font-weight:600;cursor:pointer">${t('confirm')}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(warn);
+    warn.querySelector('#pmatch-cancel').onclick = () => warn.remove();
+    warn.querySelector('#pmatch-confirm').onclick = () => { warn.remove(); doApply(); };
+  } else {
+    doApply();
+  }
+}
+
+function renderProfilesTab() {
+  const el = $('sc-content'); if (!el) return;
+  const profiles = loadProfiles();
+  const tab = state.tabs.find(t => t.id === state.activeTab);
+  const hasActive = !!tab;
+
+  el.innerHTML = `<div class="ps" style="display:flex;flex-direction:column;gap:10px">
+    ${hasActive ? `
+      <div style="display:flex;gap:8px">
+        <input id="prof-name-in" placeholder="Profile name…" maxlength="32"
+          style="flex:1;background:var(--elev);border:1px solid var(--bd2);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--t1);outline:none">
+        <button id="prof-save-btn" class="btn-accent" style="padding:8px 14px;font-size:13px;white-space:nowrap">💾 Save current</button>
+      </div>` : `<p style="font-size:13px;color:var(--t3)">No active instance — launch one to save or apply profiles.</p>`}
+    ${profiles.length === 0
+      ? `<p style="font-size:13px;color:var(--t3);text-align:center;padding:16px 0">No profiles saved yet.</p>`
+      : profiles.map(p => `
+        <div class="sc-row" style="flex-direction:column;align-items:stretch;gap:6px;padding:10px 12px" data-prof-id="${p.id}">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:14px;font-weight:600;flex:1;color:var(--t1)">${p.name}</span>
+            <span style="font-size:11px;color:var(--t3)">${p.resolution} / DPI ${p.dpi}</span>
+          </div>
+          <div style="font-size:12px;color:var(--t3)">${p.zones.length} zones · ${new Date(p.createdAt).toLocaleDateString()}</div>
+          <div style="display:flex;gap:6px;margin-top:2px">
+            ${hasActive ? `<button class="btn-sm prof-apply-btn" data-prof-id="${p.id}" style="flex:1">▶ Apply</button>` : ''}
+            <button class="btn-sm prof-delete-btn" data-prof-id="${p.id}" style="color:#e05c5c;border-color:#5c2020">✕ Delete</button>
+          </div>
+        </div>`).join('')
+    }
+  </div>`;
+
+  $('prof-save-btn')?.addEventListener('click', () => {
+    const name = $('prof-name-in')?.value.trim();
+    if (!name) { $('prof-name-in')?.focus(); return; }
+    saveCurrentProfile(name);
+  });
+  $('prof-name-in')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.stopPropagation(); $('prof-save-btn')?.click(); }
+  });
+  el.querySelectorAll('.prof-apply-btn').forEach(btn => {
+    btn.onclick = () => {
+      const p = loadProfiles().find(x => x.id === btn.dataset.profId);
+      if (p) applyProfile(p);
+    };
+  });
+  el.querySelectorAll('.prof-delete-btn').forEach(btn => {
+    btn.onclick = () => {
+      const profiles = loadProfiles().filter(x => x.id !== btn.dataset.profId);
+      saveProfiles(profiles);
+      renderScTab('profiles');
+    };
+  });
+}
+
 function renderScTab(tab) {
   const el = $('sc-content'); if (!el) return;
+  if (tab === 'profiles') { renderProfilesTab(); return; }
   if (tab === 'nav') {
     el.innerHTML = `<div class="ps">
       <p style="font-size:14px;color:var(--t2);margin-bottom:12px">${t('navRemapHint')}</p>
@@ -1721,7 +1868,6 @@ function renderScTab(tab) {
             ? `<button class="btn-sm nav-reset-btn" data-action="${action}" style="margin-left:4px;font-size:13px" title="Reset">↺</button>`
             : ''}
         </div>`).join('')}
-      <div style="font-size:13px;color:var(--t3);margin-top:12px">${t('escFixed')}</div>
     </div>`;
 
     el.querySelectorAll('.nav-remap-btn').forEach(btn => {
@@ -1950,6 +2096,8 @@ function buildSettings() {
       ${srow(t('manageDevices'),`<button class="btn-sm" id="s-devices-btn" style="padding:5px 12px">${t('viewDevices')}</button>`)}
       ${srow(t('turnOffScreenFull'),tog('tog-scr',s.device.turnScreenOff))}
       ${srow(t('enableAudio'),tog('tog-audio',s.audio.enabled))}
+      ${srow('Auto-reconnect on disconnect',tog('tog-autoreconnect',s.autoReconnect))}
+      ${srow('Show FPS counter on tabs',tog('tog-showfps',s.showFps))}
     </div>`;
   panelBody.querySelectorAll('.preset').forEach(el => {
     el.onclick = () => {
@@ -1981,6 +2129,10 @@ function buildSettings() {
   if(ts) ts.onchange=()=>{ s.device.turnScreenOff=ts.checked; saveSettings(); if (!backdropEl.classList.contains('hidden')) buildModalPresetPanel(); };
   const ta=$('tog-audio');
   if(ta) ta.onchange=()=>{ setGlobalAudioEnabled(ta.checked); if (!backdropEl.classList.contains('hidden')) buildModalPresetPanel(); };
+  const tar=$('tog-autoreconnect');
+  if(tar) tar.onchange=()=>{ s.autoReconnect=tar.checked; saveSettings(); };
+  const tfps=$('tog-showfps');
+  if(tfps) tfps.onchange=()=>{ s.showFps=tfps.checked; saveSettings(); updateAllFpsDisplays(); };
 
   $('s-devices-btn')?.addEventListener('click', () => {
     const ov = document.createElement('div');
@@ -2550,6 +2702,7 @@ function createTab(app, device) {
       <span>${tabLabel.charAt(0).toUpperCase()}</span>
     </div>
     <span class="tab-name" id="tname-${id}">${tabLabel}</span>
+    <span class="tab-fps" id="fps-${id}" style="display:${state.settings.showFps?'':'none'}">-- FPS</span>
     <button class="tab-restart" title="Restart mirroring"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg></button>
     <button class="tab-x" title="Close">×</button>`;
   // Set icon immediately from cache (same icon as in modal)
@@ -2751,6 +2904,9 @@ function activateTab(id, fromArrow = false) {
 function closeTab(id) {
   if (_recordingLockTabId) return; // block closing tabs while recording
   const tab = state.tabs.find(t=>t.id===id); if(!tab) return;
+  // Cancel any pending auto-reconnect
+  if (tab._reconnectInterval) { clearInterval(tab._reconnectInterval); tab._reconnectInterval = null; }
+  if (tab._countdownEl) { tab._countdownEl.remove(); tab._countdownEl = null; }
   stopMirror(id);
   // Only force-stop app if no other tab is using the same package on the same device
   const otherSameApp = state.tabs.find(t => t.id !== id && t.pkg === tab.pkg && t.deviceId === tab.deviceId);
@@ -2789,7 +2945,7 @@ function closeTab(id) {
 
 function updateTabState(id, status) {
   const el = document.querySelector(`.tab[data-tab-id="${id}"]`); if(!el) return;
-  el.className = `tab${status==='running'?' running':status==='error'?' error':''}${state.activeTab===id?' on':''}`;
+  el.className = `tab${status==='running'?' running':status==='error'?' error':status==='reconnecting'?' reconnecting':''}${state.activeTab===id?' on':''}`;
 }
 
 function startRename(id) {
@@ -2878,6 +3034,13 @@ async function restartMirror(tabId) {
   const device = state.devices.find(d => d.id === tab.deviceId);
   if (!device) {
     if (btn) btn.classList.remove('spinning');
+    // Device not in state yet — may still be reconnecting at ADB level.
+    // If the tab has _wasReconnecting, retry after 3 more seconds.
+    if (tab._wasReconnecting) {
+      setTimeout(() => {
+        if (state.tabs.find(t => t.id === tabId)) restartMirror(tabId);
+      }, 3000);
+    }
     return;
   }
 
@@ -2912,6 +3075,9 @@ async function restartMirror(tabId) {
     });
 
     updateTabState(tabId, 'running');
+    // Notify if this was an auto-reconnect (tab had a reconnect interval pending)
+    const _tab = state.tabs.find(t => t.id === tabId);
+    if (_tab?._wasReconnecting) { notify('Reconnected', `${_tab.label || _tab.pkg} is back online`, 'success'); _tab._wasReconnecting = false; }
     initDecoder(tabId);
     if (audioEnabled) initAudio(tabId);
     window.td.watchIme({ tabId, deviceId: tab.deviceId }).catch(() => {});
@@ -2947,6 +3113,18 @@ const PENDING_SPS = new Map();
 const STREAM_TS   = new Map();
 
 const _ambientFrameCounter = new Map(); // tabId -> count, throttles ambient bg updates
+const _fpsState = new Map(); // tabId -> { frames, last, fps }
+
+function updateFpsDisplay(tabId, fps) {
+  const el = $('fps-' + tabId);
+  if (el) el.textContent = fps + ' FPS';
+}
+function updateAllFpsDisplays() {
+  state.tabs.forEach(tab => {
+    const el = $('fps-' + tab.id);
+    if (el) el.style.display = state.settings.showFps ? '' : 'none';
+  });
+}
 
 function makeDecoder(tabId) {
   return new VideoDecoder({
@@ -2958,6 +3136,17 @@ function makeDecoder(tabId) {
         canvas.width=frame.displayWidth; canvas.height=frame.displayHeight;
       }
       ctx.drawImage(frame, 0, 0);
+
+      // FPS counter
+      const now = performance.now();
+      if (!_fpsState.has(tabId)) _fpsState.set(tabId, { frames: 0, last: now, fps: 0 });
+      const fs = _fpsState.get(tabId);
+      fs.frames++;
+      if (now - fs.last >= 1000) {
+        fs.fps = Math.round(fs.frames * 1000 / (now - fs.last));
+        fs.frames = 0; fs.last = now;
+        if (state.settings.showFps) updateFpsDisplay(tabId, fs.fps);
+      }
 
       // Ambient blurred background: updated at a reduced rate (every 6th
       // frame) and at low resolution since the blur filter hides detail
@@ -3072,6 +3261,18 @@ function bindCanvasInput(tabId, canvas) {
       window.td.pinchStart({ tabId, x, y, vx, vy, width: canvas.width, height: canvas.height });
     } else {
       window.td.touchDown({ tabId, x, y, width: canvas.width, height: canvas.height });
+      // Broadcast to all other active instances
+      if (_broadcastMode || e.shiftKey) {
+        const rx = x / canvas.width, ry = y / canvas.height;
+        const srcTab = state.tabs.find(t => t.id === tabId);
+        state.tabs.forEach(t => {
+          if (t.id === tabId) return;
+          if (t.pkg !== srcTab?.pkg) return; // only same app type
+          const tc = $('canvas-' + t.id);
+          if (!tc || tc.style.display === 'none' || tc.width === 0) return;
+          window.td.touchDown({ tabId: t.id, x: Math.round(rx * tc.width), y: Math.round(ry * tc.height), width: tc.width, height: tc.height });
+        });
+      }
     }
   });
 
@@ -3086,6 +3287,18 @@ function bindCanvasInput(tabId, canvas) {
       window.td.pinchEnd({ tabId, x, y, vx, vy, width: canvas.width, height: canvas.height });
     } else {
       window.td.touchUp({ tabId, x, y, width: canvas.width, height: canvas.height });
+      // Broadcast to all other active instances
+      if (_broadcastMode || e.shiftKey) {
+        const rx = x / canvas.width, ry = y / canvas.height;
+        const srcTab = state.tabs.find(t => t.id === tabId);
+        state.tabs.forEach(t => {
+          if (t.id === tabId) return;
+          if (t.pkg !== srcTab?.pkg) return; // only same app type
+          const tc = $('canvas-' + t.id);
+          if (!tc || tc.style.display === 'none' || tc.width === 0) return;
+          window.td.touchUp({ tabId: t.id, x: Math.round(rx * tc.width), y: Math.round(ry * tc.height), width: tc.width, height: tc.height });
+        });
+      }
     }
     // After every tap, poll once fast to catch keyboard opening
     // This fixes the "second time keyboard doesn't trigger" bug on Samsung
@@ -4152,6 +4365,7 @@ function stopMacroTimer() {}
 // ── Recording state ────────────────────────────────────────────────────────
 let _recording = null;
 let _recordingLockTabId = null; // tabId being recorded - blocks tab switch/close/restart while set
+let _broadcastMode = false; // when true, all canvas clicks propagate to all active instances
 let _recTimerInterval = null;
 let _recElapsed = 0;
 
@@ -4234,11 +4448,9 @@ function setRecordEnabled(record, tabId, enabled) {
   if (enabled) {
     if (!record.enabledTabs.includes(tabId)) record.enabledTabs.push(tabId);
     record.enabledAll = false;
-    playRecord(record, [tabId]);
   } else {
     record.enabledTabs = record.enabledTabs.filter(id => id !== tabId);
-    stopRecord(record.id);
-    if (record.enabledTabs.length > 0) playRecord(record, record.enabledTabs);
+    if (RECORD_TIMERS.has(record.id)) stopRecord(record.id);
   }
   saveRecords(); updateRecordStatus();
   if (state.panel === 'macro') buildRecordPanel();
@@ -4247,9 +4459,22 @@ function setRecordEnabled(record, tabId, enabled) {
 function setRecordEnabledAll(record, enabled) {
   record.enabledAll = enabled;
   record.enabledTabs = [];
-  if (enabled) { playRecord(record, state.tabs.map(t => t.id)); }
-  else { stopRecord(record.id); }
+  if (!enabled && RECORD_TIMERS.has(record.id)) stopRecord(record.id);
   saveRecords(); updateRecordStatus();
+  if (state.panel === 'macro') buildRecordPanel();
+}
+
+function playRecordFromPanel(record) {
+  const tabIds = record.enabledAll
+    ? state.tabs.map(t => t.id)
+    : (record.enabledTabs || []);
+  if (tabIds.length === 0) return;
+  playRecord(record, tabIds);
+  if (state.panel === 'macro') buildRecordPanel();
+}
+
+function stopRecordFromPanel(record) {
+  stopRecord(record.id);
   if (state.panel === 'macro') buildRecordPanel();
 }
 
@@ -4297,8 +4522,10 @@ function showRecordingOverlay(tabId) {
     const rec = stopRecordingSession();
     removeRecordingOverlay();
     if (rec && rec.taps.length > 0) {
-      RECORDS.push({ id:'rec-'+Date.now(), name:'Record '+(RECORDS.length+1), taps:rec.taps, settings:defaultRecordSettings(), enabledAll:false, enabledTabs:[] });
+      const recName = 'Record '+(RECORDS.length+1);
+      RECORDS.push({ id:'rec-'+Date.now(), name: recName, taps:rec.taps, settings:defaultRecordSettings(), enabledAll:false, enabledTabs:[] });
       saveRecords();
+      notify('Recording saved', `${recName} — ${rec.taps.length} taps`, 'success');
     }
     // Re-open the Record panel
     openPanelWith('macro', t('record'), '', buildRecordPanel);
@@ -4336,22 +4563,31 @@ function buildRecordPanel() {
           : RECORDS.map(r => {
               const isThisEnabled = !!(activeTab && r.enabledTabs?.includes(activeTab.id));
               const isAllEnabled = !!r.enabledAll;
+              const isPlaying = RECORD_TIMERS.has(r.id);
+              const hasTarget = isThisEnabled || isAllEnabled;
               const dur = ((r.taps?.[r.taps.length-1]?.delay||0)/1000).toFixed(1);
               return `<div style="background:var(--elev);border:1px solid var(--bd);border-radius:10px;padding:10px 12px;margin-bottom:8px">
                 <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
                   <input class="rec-name-inp" data-rid="${r.id}" value="${r.name}" style="flex:1;background:transparent;border:none;border-bottom:1px solid var(--bd);color:var(--t1);font-size:14px;font-weight:600;padding:2px 4px;outline:none">
-                  <button class="btn-sm rec-settings-btn" data-rid="${r.id}" title="${t('recSettings')}" style="padding:3px 7px">⚙</button>
-                  <button class="btn-sm rec-del-btn" data-rid="${r.id}" title="Delete" style="padding:3px 7px;color:#e05c5c">🗑</button>
+                  <button class="btn-sm rec-settings-btn" data-rid="${r.id}" title="${t('recSettings')}" style="padding:3px 7px">\u2699</button>
+                  <button class="btn-sm rec-del-btn" data-rid="${r.id}" title="Delete" style="padding:3px 7px;color:#e05c5c">\✕</button>
                 </div>
                 <div style="font-size:13px;color:var(--t3);margin-bottom:8px">${r.taps?.length||0} ${t('taps')} · ${dur}s</div>
                 <div class="srow" style="padding:0;margin-bottom:4px">
                   <span class="slbl" style="font-size:13px">${t('thisInstance')}</span>
                   ${tog('rec-tog-single-'+r.id, isThisEnabled)}
                 </div>
-                <div class="srow" style="padding:0">
+                <div class="srow" style="padding:0;margin-bottom:${hasTarget?'8px':'0'}">
                   <span class="slbl" style="font-size:13px">${t('allInstances')}</span>
                   ${tog('rec-tog-all-'+r.id, isAllEnabled)}
                 </div>
+                ${hasTarget ? `
+                <button class="btn-sm rec-play-btn" data-rid="${r.id}"
+                  style="width:100%;padding:7px;font-size:13px;font-weight:600;
+                    background:${isPlaying?'#5c2020':'var(--acc)'};
+                    color:#fff;border-color:${isPlaying?'#7a2a2a':'var(--acc)'}">
+                  ${isPlaying ? '\u23f9 Stop' : '\u25b6 Play'}
+                </button>` : ''}
               </div>`;
             }).join('')}
       </div>
@@ -4374,6 +4610,14 @@ function buildRecordPanel() {
   RECORDS.forEach(rec => {
     const ts=$('rec-tog-single-'+rec.id); if(ts) ts.onchange=e=>setRecordEnabled(rec,activeTab?.id,e.target.checked);
     const ta=$('rec-tog-all-'+rec.id);   if(ta) ta.onchange=e=>setRecordEnabledAll(rec,e.target.checked);
+  });
+  panelBody.querySelectorAll('.rec-play-btn').forEach(btn => {
+    btn.onclick = () => {
+      const rec = RECORDS.find(r => r.id === btn.dataset.rid);
+      if (!rec) return;
+      if (RECORD_TIMERS.has(rec.id)) stopRecordFromPanel(rec);
+      else playRecordFromPanel(rec);
+    };
   });
 
   $('rec-start-btn')?.addEventListener('click', () => {
@@ -4519,8 +4763,46 @@ window.td.onMeta(({ tabId, width, height }) => {
   if(canvas){canvas.width=width;canvas.height=height;}
 });
 
-window.td.onEnded(({ tabId }) => updateTabState(tabId,'stopped'));
-window.td.onError(({ tabId }) => updateTabState(tabId,'error'));
+window.td.onEnded(({ tabId, unexpected }) => {
+  updateTabState(tabId, 'stopped');
+  const tab = state.tabs.find(t => t.id === tabId);
+  if (!unexpected || !tab || !state.settings.autoReconnect) return;
+  notify('Connection lost', `${tab.label || tab.pkg} disconnected — reconnecting…`, 'warn');
+
+  // Unexpected disconnect — auto-reconnect after 3s with visual countdown
+  let secondsLeft = 3;
+  updateTabState(tabId, 'reconnecting');
+  // Create a temporary overlay on the canvas for the countdown
+  const cv = $('canvas-' + tabId);
+  let countdownEl = null;
+  if (cv && cv.parentElement) {
+    countdownEl = document.createElement('div');
+    countdownEl.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55);z-index:5;pointer-events:none';
+    countdownEl.innerHTML = `<span style="color:#fff;font-size:14px;opacity:.9">Reconnecting in ${secondsLeft}s…</span>`;
+    cv.parentElement.appendChild(countdownEl);
+  }
+  const showCountdown = () => {
+    if (countdownEl) countdownEl.querySelector('span').textContent = `Reconnecting in ${secondsLeft}s…`;
+  };
+  const interval = setInterval(() => {
+    secondsLeft--;
+    if (secondsLeft <= 0) {
+      clearInterval(interval);
+      const _t = state.tabs.find(t => t.id === tabId);
+      if (_t) { _t._wasReconnecting = true; if (countdownEl) countdownEl.remove(); restartMirror(tabId); }
+    } else {
+      showCountdown();
+    }
+  }, 1000);
+  // Store interval so closeTab can cancel it
+  tab._reconnectInterval = interval;
+  tab._countdownEl = countdownEl;
+});
+window.td.onError(({ tabId }) => {
+  updateTabState(tabId,'error');
+  const tab = state.tabs.find(t => t.id === tabId);
+  notify('Mirror error', `${tab?.label || tab?.pkg || 'Instance'} failed to connect`, 'error');
+});
 
 // ── Global keyboard ────────────────────────────────────────────────────────
 
@@ -4530,6 +4812,7 @@ const NAV_DEFAULTS = {
   closeTab:     { label: 'navCloseTab',    default: 'Ctrl+W',      ctrl: true,  key: 'w' },
   nextTab:      { label: 'navNextTab',     default: 'ArrowRight',  ctrl: false, key: 'ArrowRight' },
   prevTab:      { label: 'navPrevTab',     default: 'ArrowLeft',   ctrl: false, key: 'ArrowLeft'  },
+  closePanel:   { label: 'navClosePanel',  default: 'Escape',      ctrl: false, key: 'Escape'     },
 };
 
 function loadNavKeys() {
@@ -4580,6 +4863,20 @@ function toggleUiCollapse(force) {
 
 document.getElementById('btn-collapse-ui')?.addEventListener('click', () => toggleUiCollapse());
 
+// ── Broadcast mode ─────────────────────────────────────────────────────────
+function setBroadcastMode(on) {
+  _broadcastMode = on;
+  const btn = $('btn-broadcast');
+  if (btn) {
+    btn.style.background   = on ? 'var(--acc)'  : 'var(--elev)';
+    btn.style.borderColor  = on ? 'var(--acc)'  : 'var(--bd2)';
+    btn.style.color        = on ? '#fff'         : 'var(--t2)';
+    btn.title = on ? 'Broadcast ON — click propagates to all instances (B)' : 'Broadcast clicks to all instances (B)';
+  }
+  if (on) toast('Broadcast ON', 'All clicks will propagate to every active instance', 'info');
+}
+$('btn-broadcast')?.addEventListener('click', () => setBroadcastMode(!_broadcastMode));
+
 // Clicking inside the reveal-trigger strip (top edge, only visible while
 // collapsed) permanently brings the bars back - same single source of
 // truth as the button.
@@ -4624,6 +4921,15 @@ document.addEventListener('keydown', e => {
     return;
   }
 
+  // B toggles broadcast mode
+  if (e.key === 'b' || e.key === 'B') {
+    if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault(); e.stopPropagation();
+      setBroadcastMode(!_broadcastMode);
+      return;
+    }
+  }
+
   if (navKeyMatches('newInstance', e)) { e.preventDefault(); e.stopPropagation(); openModal(); return; }
   if (navKeyMatches('closeTab', e) && state.activeTab) { e.preventDefault(); e.stopPropagation(); closeTab(state.activeTab); return; }
 
@@ -4653,10 +4959,10 @@ document.addEventListener('keydown', e => {
       return;
     }
     if (!typingMode) {
-      if (state.panel) { closePanel(); return; }
-      if (state.activeTab) {
+      if (state.panel && navKeyMatches('closePanel', e)) { e.preventDefault(); e.stopPropagation(); closePanel(); return; }
+      if (state.activeTab && navKeyMatches('closePanel', e)) {
         const ov = $('zone-overlay-'+state.activeTab);
-        if (ov?._cleanup) { stopZoneEditor(state.activeTab); return; }
+        if (ov?._cleanup) { e.preventDefault(); e.stopPropagation(); stopZoneEditor(state.activeTab); return; }
       }
     }
   }
@@ -4741,10 +5047,201 @@ async function loadDevices() {
 
 // Poll for device changes every 3 seconds
 // ── Warmup events ──────────────────────────────────────────────────────────
+// ── Toast / in-app notification system ────────────────────────────────────
+(function() {
+  let container = null;
+  function getContainer() {
+    if (!container || !container.isConnected) {
+      container = document.createElement('div');
+      container.id = 'toast-container';
+      document.body.appendChild(container);
+    }
+    return container;
+  }
+
+  const ICONS = { info: 'ℹ️', success: '✅', error: '❌', warn: '⚠️' };
+  const DURATION = { info: 4000, success: 4000, error: 6000, warn: 5000 };
+
+  window.toast = function(title, message, type = 'info', duration) {
+    const ct = getContainer();
+    const ms = duration ?? DURATION[type] ?? 4000;
+    const el = document.createElement('div');
+    el.className = `toast toast-${type} toast-entering`;
+    el.innerHTML = `
+      <span class="toast-icon">${ICONS[type]}</span>
+      <div class="toast-body">
+        <div class="toast-title">${title}</div>
+        ${message ? `<div class="toast-msg">${message}</div>` : ''}
+      </div>
+      <button class="toast-close" title="Dismiss">×</button>
+      <div class="toast-progress" style="width:100%;transition-duration:${ms}ms"></div>`;
+    ct.appendChild(el);
+
+    // Animate in
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        el.classList.remove('toast-entering');
+        // Start progress bar drain
+        el.querySelector('.toast-progress').style.width = '0%';
+      });
+    });
+
+    const dismiss = () => {
+      if (!el.isConnected) return;
+      el.classList.add('toast-leaving');
+      setTimeout(() => el.remove(), 380);
+    };
+
+    el.querySelector('.toast-close').onclick = dismiss;
+    const timer = setTimeout(dismiss, ms);
+    el.addEventListener('mouseenter', () => {
+      // Pause on hover
+      clearTimeout(timer);
+      el.querySelector('.toast-progress').style.transitionDuration = '0ms';
+    });
+    el.addEventListener('mouseleave', () => {
+      // Resume on leave with remaining time ~500ms
+      const prog = el.querySelector('.toast-progress');
+      prog.style.transitionDuration = '500ms';
+      prog.style.width = '0%';
+      setTimeout(dismiss, 500);
+    });
+
+    return el;
+  };
+})();
+
+// Override the OS notify() to use in-app toasts instead
+function notify(title, body, type) {
+  window.toast(title, body, type || 'info');
+}
+
 setInterval(loadDevices, 3000);
 
 // ── Nav ────────────────────────────────────────────────────────────────────
 $('btn-new').onclick = openModal;
+
+// ── Layout Manager ─────────────────────────────────────────────────────────
+function loadLayouts() {
+  try { return JSON.parse(localStorage.getItem('tabpilot:layouts') || '[]'); } catch { return []; }
+}
+function saveLayouts(layouts) {
+  try { localStorage.setItem('tabpilot:layouts', JSON.stringify(layouts)); } catch {}
+}
+
+function saveCurrentLayout(name) {
+  if (!state.tabs.length) { toast('No instances open', 'Open at least one instance first', 'warn'); return; }
+  const layouts = loadLayouts();
+  const layout = {
+    id: 'layout-' + Date.now(),
+    name: name.trim(),
+    tabs: state.tabs.map((t, i) => ({
+      pkg: t.pkg, userId: t.userId || 0, deviceId: t.deviceId,
+      label: t.label, appName: t.appName,
+    })),
+    activeIndex: state.tabs.findIndex(t => t.id === state.activeTab),
+    createdAt: Date.now(),
+  };
+  layouts.push(layout);
+  saveLayouts(layouts);
+  toast('Layout saved', `"${layout.name}" — ${layout.tabs.length} instance${layout.tabs.length!==1?'s':''}`, 'success');
+  renderLayoutsModal();
+}
+
+async function restoreLayout(layout) {
+  // Close all current tabs first
+  const toClose = [...state.tabs.map(t => t.id)];
+  toClose.forEach(id => closeTab(id));
+
+  let successCount = 0;
+  for (const entry of layout.tabs) {
+    const device = state.devices.find(d => d.id === entry.deviceId);
+    if (!device) {
+      toast('Device not found', `${entry.deviceId} — skipped`, 'warn');
+      continue;
+    }
+    // Find the app — try iconCache keys or fetch app list
+    let app = null;
+    const allApps = await window.td.listApps(device.id, entry.userId).catch(() => []);
+    app = allApps.find(a => a.package === entry.pkg && (a.userId || 0) === entry.userId);
+    if (!app) {
+      toast('App not found', `${entry.pkg} — skipped`, 'warn');
+      continue;
+    }
+    await launchMirror(app, device).catch(() => {});
+    successCount++;
+  }
+  if (successCount > 0) toast('Layout restored', `"${layout.name}" — ${successCount} instance${successCount!==1?'s':''}`, 'success');
+}
+
+function renderLayoutsModal() {
+  let modal = $('layouts-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'layouts-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center';
+    document.body.appendChild(modal);
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  }
+
+  const layouts = loadLayouts();
+  modal.innerHTML = `
+    <div style="background:var(--surf);border:1px solid var(--bd2);border-radius:14px;padding:24px 28px;width:420px;max-height:80vh;display:flex;flex-direction:column;gap:14px;overflow:hidden">
+      <div style="font-size:16px;font-weight:700;color:var(--t1)">Layout Manager</div>
+      <div style="display:flex;gap:8px">
+        <input id="layout-name-in" placeholder="Layout name…" maxlength="40"
+          style="flex:1;background:var(--elev);border:1px solid var(--bd2);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--t1);outline:none">
+        <button id="layout-save-btn" class="btn-accent" style="padding:8px 14px;font-size:13px;white-space:nowrap">💾 Save</button>
+      </div>
+      <div style="overflow-y:auto;display:flex;flex-direction:column;gap:8px;flex:1">
+        ${layouts.length === 0
+          ? `<p style="font-size:13px;color:var(--t3);text-align:center;padding:20px 0">No layouts saved yet.<br>Open some instances and save a layout.</p>`
+          : layouts.map(l => `
+            <div style="background:var(--elev);border:1px solid var(--bd);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:6px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-size:14px;font-weight:600;flex:1;color:var(--t1)">${l.name}</span>
+                <span style="font-size:11px;color:var(--t3)">${new Date(l.createdAt).toLocaleDateString()}</span>
+              </div>
+              <div style="font-size:12px;color:var(--t3)">${l.tabs.length} instance${l.tabs.length!==1?'s':''} · ${[...new Set(l.tabs.map(t=>t.deviceId))].length} device${[...new Set(l.tabs.map(t=>t.deviceId))].length!==1?'s':''}</div>
+              <div style="font-size:12px;color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${l.tabs.map(t=>t.label||t.appName||t.pkg).join(' · ')}</div>
+              <div style="display:flex;gap:6px;margin-top:4px">
+                <button class="btn-sm layout-restore-btn" data-lid="${l.id}" style="flex:1">▶ Restore</button>
+                <button class="btn-sm layout-delete-btn" data-lid="${l.id}" style="color:#e05c5c;border-color:#5c2020">✕</button>
+              </div>
+            </div>`).join('')
+        }
+      </div>
+      <button id="layout-close-btn" style="background:var(--elev);color:var(--t2);border:1px solid var(--bd);border-radius:8px;padding:9px;font-size:14px;cursor:pointer">Close</button>
+    </div>`;
+
+  modal.querySelector('#layout-save-btn').onclick = () => {
+    const name = modal.querySelector('#layout-name-in').value.trim();
+    if (!name) { modal.querySelector('#layout-name-in').focus(); return; }
+    saveCurrentLayout(name);
+  };
+  modal.querySelector('#layout-name-in').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.stopPropagation(); modal.querySelector('#layout-save-btn').click(); }
+    if (e.key === 'Escape') modal.remove();
+  });
+  modal.querySelector('#layout-close-btn').onclick = () => modal.remove();
+  modal.querySelectorAll('.layout-restore-btn').forEach(btn => {
+    btn.onclick = () => {
+      const l = loadLayouts().find(x => x.id === btn.dataset.lid);
+      if (!l) return;
+      modal.remove();
+      restoreLayout(l);
+    };
+  });
+  modal.querySelectorAll('.layout-delete-btn').forEach(btn => {
+    btn.onclick = () => {
+      const layouts = loadLayouts().filter(x => x.id !== btn.dataset.lid);
+      saveLayouts(layouts);
+      renderLayoutsModal();
+    };
+  });
+}
+
+$('btn-layouts')?.addEventListener('click', renderLayoutsModal);
 $('btn-new-empty').onclick = openModal;
 
 $('nav-shortcuts').onclick = () => {

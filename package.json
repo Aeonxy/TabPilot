@@ -1,6 +1,6 @@
 {
   "name": "tabpilot",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Multi-instance Android mirroring",
   "main": "src/main/index.js",
   "productName": "TabPilot",

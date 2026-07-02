@@ -1030,7 +1030,7 @@ async function startMirror(opts) {
   }
 
   videoSock.on('end',   ()  => {
- if (win) win.webContents.send('mirror:ended', { tabId }); stopSession(tabId); });
+ if (win) win.webContents.send('mirror:ended', { tabId, unexpected: !_manuallyStopped.has(tabId) }); _manuallyStopped.delete(tabId); stopSession(tabId); });
   videoSock.on('error', err => {
  if (win) win.webContents.send('mirror:error', { tabId, error: err.message }); });
   proc.on('exit', code => {
@@ -1085,7 +1085,10 @@ async function startMirror(opts) {
   return { tabId, status: 'running' };
 }
 
+const _manuallyStopped = new Set(); // tabIds stopped intentionally by user
+
 function stopSession(id) {
+  _manuallyStopped.add(id);
   const s = sessions.get(id);
   if (s) {
     if (s._screenOffInterval) clearInterval(s._screenOffInterval);
